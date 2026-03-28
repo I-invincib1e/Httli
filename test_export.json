@@ -1,0 +1,32 @@
+{
+  "requests": {
+    "auth/get": {
+      "method": "GET",
+      "url": "https://jsonplaceholder.typicode.com/posts/1"
+    },
+    "auth/login": {
+      "method": "GET",
+      "url": "https://success.com"
+    },
+    "env/get": {
+      "method": "GET",
+      "url": "https://jsonplaceholder.typicode.com/posts/2"
+    },
+    "test/err": {
+      "method": "GET",
+      "url": "-encodedCommand"
+    },
+    "test/json": {
+      "method": "POST",
+      "url": "https://example.com",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": "{invalid"
+    },
+    "test/retry": {
+      "method": "GET",
+      "url": "http://localhost:9999"
+    }
+  }
+}

@@ -1,96 +1,131 @@
 package client
 
 import (
-    "bytes"
-    "encoding/base64"
-    "fmt"
-    "io"
-    "net/http"
-    "strings"
-    "time"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
 
-    "github.com/I-invincib1e/http-cli/internal/config"
+	"github.com/I-invincib1e/http-cli/internal/config"
 )
 
 // Response holds the HTTP response data
 type Response struct {
-    StatusCode int
-    Status     string
-    Headers    http.Header
-    Body       []byte
-    Duration   time.Duration
+	StatusCode int
+	Status     string
+	Headers    http.Header
+	Body       []byte
+	Duration   time.Duration
 }
 
 // addAuth adds authentication headers to the config
 func addAuth(cfg *config.Config) error {
-    if cfg.Headers == nil {
-        cfg.Headers = make(map[string]string)
-    }
+	if cfg.Headers == nil {
+		cfg.Headers = make(map[string]string)
+	}
 
-    if cfg.BearerToken != "" {
-        cfg.Headers["Authorization"] = "Bearer " + cfg.BearerToken
-    } else if cfg.BasicAuth != "" {
-        parts := strings.SplitN(cfg.BasicAuth, ":", 2)
-        if len(parts) != 2 {
-            return fmt.Errorf("basic auth format should be 'user:pass'")
-        }
-        auth := base64.StdEncoding.EncodeToString([]byte(cfg.BasicAuth))
-        cfg.Headers["Authorization"] = "Basic " + auth
-    }
-    return nil
+	if cfg.BearerToken != "" {
+		cfg.Headers["Authorization"] = "Bearer " + cfg.BearerToken
+	} else if cfg.BasicAuth != "" {
+		parts := strings.SplitN(cfg.BasicAuth, ":", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("basic auth format should be 'user:pass'")
+		}
+		auth := base64.StdEncoding.EncodeToString([]byte(cfg.BasicAuth))
+		cfg.Headers["Authorization"] = "Basic " + auth
+	}
+	return nil
 }
 
 // ExecuteRequest executes an HTTP request based on the provided config
 func ExecuteRequest(cfg *config.Config) (*Response, error) {
-    if err := addAuth(cfg); err != nil {
-        return nil, err
-    }
+	if err := addAuth(cfg); err != nil {
+		return nil, err
+	}
 
-    httpClient := &http.Client{Timeout: time.Duration(cfg.Timeout) * time.Second}
-    if !cfg.FollowRedirects {
-        httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-            return http.ErrUseLastResponse
-        }
-    }
+	httpClient := &http.Client{Timeout: time.Duration(cfg.Timeout) * time.Second}
+	if !cfg.FollowRedirects {
+		httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
 
-    var body io.Reader
-    if cfg.Body != "" {
-        body = bytes.NewBufferString(cfg.Body)
-    }
+	// JSON validation
+	isJsonContent := false
+	for k, v := range cfg.Headers {
+		if strings.ToLower(k) == "content-type" && strings.Contains(strings.ToLower(v), "application/json") {
+			isJsonContent = true
+			break
+		}
+	}
 
-    req, err := http.NewRequest(cfg.Method, cfg.URL, body)
-    if err != nil {
-        return nil, fmt.Errorf("error creating request: %w", err)
-    }
+	trimmedBody := strings.TrimSpace(cfg.Body)
+	if trimmedBody != "" && (isJsonContent || strings.HasPrefix(trimmedBody, "{") || strings.HasPrefix(trimmedBody, "[")) {
+		if !json.Valid([]byte(trimmedBody)) {
+			return nil, fmt.Errorf("invalid JSON body provided")
+		}
+	}
 
-    for k, v := range cfg.Headers {
-        req.Header.Set(k, v)
-    }
+	var lastErr error
 
-    if cfg.Body != "" && req.Header.Get("Content-Type") == "" {
-        req.Header.Set("Content-Type", "application/json")
-    }
+	retries := cfg.Retry
+	if retries < 0 {
+		retries = 0
+	}
+	delay := time.Duration(cfg.RetryDelay) * time.Second
 
-    start := time.Now()
-    resp, err := httpClient.Do(req)
-    duration := time.Since(start)
+	for i := 0; i <= retries; i++ {
+		var bodyReader io.Reader
+		if cfg.Body != "" {
+			bodyReader = strings.NewReader(cfg.Body)
+		}
 
-    if err != nil {
-        return nil, fmt.Errorf("error making request: %w", err)
-    }
-    defer resp.Body.Close()
+		req, err := http.NewRequest(cfg.Method, cfg.URL, bodyReader)
+		if err != nil {
+			return nil, fmt.Errorf("error creating request: %w", err)
+		}
 
-    bodyBytes, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return nil, fmt.Errorf("error reading response body: %w", err)
-    }
+		for k, v := range cfg.Headers {
+			req.Header.Set(k, v)
+		}
 
-    return &Response{
-        StatusCode: resp.StatusCode,
-        Status:     resp.Status,
-        Headers:    resp.Header,
-        Body:       bodyBytes,
-        Duration:   duration,
-    }, nil
+		if cfg.Body != "" && req.Header.Get("Content-Type") == "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+
+		start := time.Now()
+		resp, err := httpClient.Do(req)
+		duration := time.Since(start)
+
+		if err == nil && resp.StatusCode < 500 {
+			defer resp.Body.Close()
+			bodyBytes, errRead := io.ReadAll(resp.Body)
+			if errRead != nil {
+				return nil, fmt.Errorf("error reading response body: %w", errRead)
+			}
+			return &Response{
+				StatusCode: resp.StatusCode,
+				Status:     resp.Status,
+				Headers:    resp.Header,
+				Body:       bodyBytes,
+				Duration:   duration,
+			}, nil
+		}
+
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf("server error: %d %s", resp.StatusCode, resp.Status)
+			resp.Body.Close()
+		}
+
+		if i < retries {
+			time.Sleep(delay)
+		}
+	}
+
+	return nil, fmt.Errorf("request failed: %v", lastErr)
 }
-
