@@ -12,10 +12,10 @@
 
 [Getting Started](#-getting-started) •
 [Features](#-features) •
+[Scripting & CI](#-scripting--ci) •
 [Collections](#-collections) •
 [Environments](#-environments) •
-[History](#-history) •
-[Contributing](#-contributing)
+[History](#-history)
 
 </div>
 
@@ -32,6 +32,9 @@ httli -u https://api.github.com/users/octocat
 # Save, reuse, and share API workflows
 httli collection save auth/login -m POST -u {{BASE_URL}}/login -d '{"user":"admin"}'
 httli collection run auth/login --env prod
+
+# Run test suites locally or in CI
+httli collection run-all auth/ --fail-fast --timeout 10s
 ```
 
 ---
@@ -91,100 +94,74 @@ httli request send -m GET -u https://api.github.com/users/octocat
 |---------|-------------|
 | `httli -u <url>` | Quick GET request |
 | `httli request send [flags]` | Full request with all options |
-| `httli collection [command]` | Manage saved requests |
+| `httli collection [cmd]` | Manage saved requests (`save`, `run`, `run-all`, `list`) |
 | `httli history` | View request history |
 | `httli rerun <n>` | Re-execute from history |
 | `httli completion <shell>` | Generate autocomplete scripts |
 
 ---
 
-## 🎨 Features
+## 🤖 Scripting & CI
 
-### Color-Coded Output
-- 🟣 **Purple** — Section headers (`REQUEST`, `RESPONSE`)
-- 🔵 **Cyan** — HTTP methods (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`)
-- 🟢 **Green** — Success status codes (2xx)
-- 🟡 **Yellow** — Redirect status codes (3xx)
-- 🔴 **Red** — Error status codes (4xx/5xx)
+Httli is fully equipped for headless execution, automated tests, and shell pipelines.
 
-### All HTTP Methods
+### JSON Output & Extraction
+Output structured JSON to pass to `jq`, or use Httli's native JSON extractor to bypass external tools entirely. Httli adds a helpful `ok` boolean for quick success checking.
+
 ```bash
-httli -m POST -u https://api.example.com/users -d '{"name":"John"}'
-httli -m PUT -u https://api.example.com/users/1 -d '{"name":"Jane"}'
-httli -m DELETE -u https://api.example.com/users/1
-httli -m PATCH -u https://api.example.com/users/1 -d '{"role":"admin"}'
+# Extract value natively using dot notation (supports arrays)
+httli -u https://api.example.com/data --extract .items[0].id
+
+# Or pipe structured JSON to jq
+httli -u https://api.example.com/data --format json | jq -e '.ok'
 ```
 
-### Authentication
+### Piping Stdin
+Pass file data or piped payload bodies directly using `@-` syntax:
 ```bash
-# Bearer token
-httli -u https://api.example.com/data -b "your-token-here"
-
-# Basic auth
-httli -u https://api.example.com/data -a "username:password"
+echo '{"key":"value"}' | httli -m POST -u https://api.example.com -d @-
 ```
 
-### Dry Run
-Preview your fully interpolated request without hitting the network:
-```bash
-httli request send --dry-run -u {{BASE_URL}}/admin -b {{API_TOKEN}}
-```
+### Headless Controls
+Perfect for scripts and CI/CD validation.
 
-### Smart Retry
-Automatically retry on network failures and 5xx server errors:
-```bash
-httli -u https://api.example.com/data --retry 3 --retry-delay 2
-```
-
-### JSON Validation
-Catches invalid JSON bodies **before** making the network request:
-```bash
-httli -m POST -u https://api.example.com -d '{invalid'
-# Error: invalid JSON body provided
-```
+| Flag | Role |
+|------|------|
+| `--fail` (`-F`) | Exits with code `22` natively on HTTP 4xx/5xx responses. |
+| `--silent` (`-S`) | Suppresses all CLI output entirely—only the exit code remains. |
+| `--status-only` (`-s`) | Prints exactly only the response code (e.g., `200`). |
+| `--timeout 5s` | Uses Go duration syntax to strictly enforce timeout limits. |
 
 ---
 
-## 📁 Collections
+## 📁 Collections & Workflows
 
-![Collection Workflow](assets/collection_workflow.png)
+Save, organize, and replay your API requests. Collections can be scoped globally to your machine or locally to your project workspace.
 
-Save, organize, and replay your API requests like Postman — in the terminal.
+### Project-Local Storage
+If Httli detects a `.httli/` directory in your current working directory, it will save collections and history there instead of globally. Add this folder to your repository to share API specifications closely with your code!
 
-### Save a request (fails if it already exists)
+### Namespace Grouping
+Group related requests automatically by adding a slash prefix:
 ```bash
-httli collection save auth/login \
-  -m POST \
-  -u {{BASE_URL}}/auth/login \
-  -d '{"email":"admin@example.com","password":"secret"}'
+httli collection save auth/login -m POST -u {{BASE_URL}}/login
+httli collection save auth/refresh -m POST -u {{BASE_URL}}/refresh
 ```
 
-### Update an existing request
+### Run-All Batch Execution
+Run a full folder of grouped queries automatically with state chaining:
 ```bash
-httli collection update auth/login -d '{"email":"new@example.com","password":"new"}'
+$ httli collection run-all auth/ --fail-fast --timeout 10s
 ```
 
-### Run a saved request
-```bash
-httli collection run auth/login --env prod
-```
+After executing a batch, `run-all` generates a production-grade summary table outlining successful attempts, failed endpoints, and cumulative response times.
 
-### List all saved requests
-```bash
-httli collection list
-```
+**State Chaining**: `run-all` automatically handles passing data between sequence execution via environment variables:
+- `HTTLI_LAST_STATUS` (e.g. "200")
+- `HTTLI_LAST_BODY_PATH` (Absolute path to a temporary file storing the raw body)
+- `HTTLI_LAST_JSON` (Direct body string, available if the response is valid JSON and <32KB)
 
-### Show request details (formatted)
-```bash
-httli collection show auth/login
-```
-
-### Delete a request
-```bash
-httli collection delete auth/login
-```
-
-### Export & Import (share with your team!)
+### Export & Import (Global format)
 ```bash
 # Export
 httli collection export team-api.json
@@ -192,7 +169,6 @@ httli collection export team-api.json
 # Import with conflict handling
 httli collection import team-api.json              # merge (default)
 httli collection import team-api.json --overwrite   # replace conflicts
-httli collection import team-api.json --skip        # skip conflicts
 ```
 
 ---
@@ -200,20 +176,6 @@ httli collection import team-api.json --skip        # skip conflicts
 ## 🌍 Environments
 
 Use `.env` files with `{{variable}}` interpolation across URLs, headers, body, and auth.
-
-### Create environment files
-```bash
-# .env (base defaults)
-BASE_URL=https://dev.api.example.com
-API_TOKEN=dev-token-123
-
-# .env.local (local overrides)
-API_TOKEN=my-personal-token
-
-# .env.prod (production)
-BASE_URL=https://api.example.com
-API_TOKEN=prod-token-abc
-```
 
 ### Loading order
 ```
@@ -224,35 +186,15 @@ API_TOKEN=prod-token-abc
 
 ### Usage
 ```bash
-# Uses .env + .env.local
-httli -u {{BASE_URL}}/users -b {{API_TOKEN}}
-
 # Uses .env + .env.local + .env.prod
 httli collection run auth/login --env prod
 ```
-
-### Global default environment
-Create `~/.httli/config.json`:
-```json
-{
-  "default_env": "dev"
-}
-```
-
-### Strict variable checking
-Missing variables fail fast by default:
-```
-Error: environment variable 'BASE_URL' not found
-```
-Bypass with `--ignore-missing-env` if needed.
 
 ---
 
 ## 📊 History
 
-![History Feature](assets/history_feature.png)
-
-Every executed request is automatically saved with rich metadata.
+Every executed request is automatically saved. The last **50 requests** are retained.
 
 ```bash
 # View history
@@ -261,14 +203,9 @@ httli history
 # Inspect a specific entry
 httli history show 1
 
-# Re-execute a previous request
-httli rerun 1
-
-# Clear history
-httli history clear
+# Re-execute a previous request (applying local overrides)
+httli rerun 1 --timeout 10s --format json
 ```
-
-History entries include: timestamp, HTTP method, URL, and response status code. The last **50 requests** are retained automatically.
 
 ---
 
@@ -278,52 +215,26 @@ History entries include: timestamp, HTTP method, URL, and response status code. 
 |------|-----------|-------------|
 | `-m` | `--method` | HTTP method (default: GET) |
 | `-u` | `--url` | URL to request (required) |
-| `-d` | `--data` | Request body (JSON string) |
+| `-d` | `--data` | Request body (JSON string, `@-` for stdin, `@path` for file) |
 | `-f` | `--file` | Read request body from file |
 | `-H` | `--header` | Headers (`Key:Value,Key2:Value2`) |
 | `-b` | `--bearer` | Bearer token |
 | `-a` | `--auth` | Basic auth (`user:pass`) |
 | `-o` | `--output` | Save response body to file |
 | `-e` | `--env` | Environment name (loads `.env.<name>`) |
-| `-t` | `--timeout` | Timeout in seconds (default: 30) |
+| `-t` | `--timeout` | Timeout duration (e.g. `5s`, `1m`) (default: `30s`) |
 | `-r` | `--retry` | Number of retries on failure |
 | | `--retry-delay` | Delay between retries in seconds |
 | | `--dry-run` | Print request without execution |
 | | `--ignore-missing-env` | Don't fail on missing `{{VAR}}` |
+| | `--format` | Output format (e.g., `json`) |
+| `-x` | `--extract` | Extract JSON response property (`.data.token`) |
+| `-F` | `--fail` | Exit with error code 22 on HTTP 4xx/5xx |
 | `-L` | `--follow` | Follow redirects |
+| `-S` | `--silent` | Total silence. Exit code only. |
 | `-q` | `--quiet` | Only show response body |
 | `-v` | `--verbose` | Show all details |
-| `-s` | `--status-only` | Show only status code |
-
----
-
-## 🏗️ Architecture
-
-```
-httli
-├── cmd/
-│   ├── httli/main.go   # Entrypoint
-│   ├── root.go             # Command router + Levenshtein suggestions
-│   ├── request.go          # request send
-│   ├── collection.go       # collection save/run/list/show/update/delete/export/import
-│   ├── history.go          # history list/show/clear + rerun
-│   ├── completion.go       # Shell autocomplete generator
-│   └── env.go              # env list
-│
-├── internal/
-│   ├── client/client.go    # HTTP executor + retry logic
-│   ├── config/
-│   │   ├── config.go       # Flag parsing + interpolation
-│   │   ├── env.go          # .env file loader
-│   │   └── global.go       # Global config (~/.httli/config.json)
-│   ├── collections/        # JSON collection storage
-│   ├── history/            # Request history engine
-│   ├── output/             # Colorful terminal renderer
-│   └── styles/             # Lipgloss style definitions
-│
-├── docs/                   # How-to guides
-└── assets/                 # Images for README
-```
+| `-s` | `--status-only` | Show exactly only the integer status code |
 
 ---
 
@@ -334,16 +245,3 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 ## 📄 License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
-
-## 💬 Support
-
-- Open an [Issue](https://github.com/I-invincib1e/Httli/issues)
-- Discussions and feature requests are welcome
-
----
-
-<div align="center">
-
-**Built with ❤️ in Go — Zero Dependencies**
-
-</div>

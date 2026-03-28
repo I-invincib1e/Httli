@@ -3,8 +3,10 @@ package config
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 // Config holds all configuration for the HTTP request
@@ -14,11 +16,12 @@ type Config struct {
 	Headers          map[string]string
 	Body             string
 	BodyFile         string
-	Timeout          int
+	Timeout          time.Duration
 	FollowRedirects  bool
 	BearerToken      string
 	BasicAuth        string
 	OutputFile       string
+	Silent           bool
 	Quiet            bool
 	Verbose          bool
 	StatusOnly       bool
@@ -27,6 +30,12 @@ type Config struct {
 	Retry            int
 	RetryDelay       int
 	DryRun           bool
+
+	// New gap-coverage flags
+	Format  string // "json" for structured output, "" for pretty
+	Fail    bool   // exit 22 on HTTP 4xx/5xx
+	Raw     bool   // output raw body only, no chrome
+	Extract string // dot-notation path to extract from JSON response
 }
 
 // InterpolateAll substitutes all {{VAR}} templating in the Config using Env vars.
@@ -54,8 +63,11 @@ func (c *Config) InterpolateAll() error {
 // ParseFlags parses command-line flags and returns a Config struct
 func ParseFlags(args []string) (*Config, error) {
 	var method, url, body, headers, bodyFile, bearerToken, basicAuth, outputFile, env string
-	var timeout, retry, retryDelay int
-	var followRedirects, quiet, verbose, statusOnly, ignoreMissingEnv, dryRun bool
+	var format, extract string
+	var timeout time.Duration
+	var retry, retryDelay int
+	var followRedirects, silent, quiet, verbose, statusOnly, ignoreMissingEnv, dryRun bool
+	var fail, raw bool
 
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	fs.Usage = PrintUsage
@@ -72,27 +84,38 @@ func ParseFlags(args []string) (*Config, error) {
 		fs.IntVar(target, short, defVal, usage)
 		fs.IntVar(target, long, defVal, usage)
 	}
+	registerDuration := func(short, long string, target *time.Duration, defVal time.Duration, usage string) {
+		fs.DurationVar(target, short, defVal, usage)
+		fs.DurationVar(target, long, defVal, usage)
+	}
 
 	registerStr("m", "method", &method, "GET", "HTTP method (GET, POST, PUT, DELETE, PATCH)")
 	registerStr("u", "url", &url, "", "URL to request")
-	registerStr("d", "data", &body, "", "Request body (JSON string)")
+	registerStr("d", "data", &body, "", "Request body (JSON string, or @- for stdin, or @file)")
 	registerStr("f", "file", &bodyFile, "", "Read request body from file")
 	registerStr("H", "header", &headers, "", "Headers (format: 'Key:Value')")
 	registerStr("b", "bearer", &bearerToken, "", "Bearer token")
 	registerStr("a", "auth", &basicAuth, "", "Basic auth (user:pass)")
 	registerStr("o", "output", &outputFile, "", "Save response body to file")
 	registerStr("e", "env", &env, "", "Environment name (loads .env.<name>)")
-	registerInt("t", "timeout", &timeout, 30, "Request timeout in seconds")
+	registerDuration("t", "timeout", &timeout, 30*time.Second, "Request timeout (e.g. 5s, 1m)")
 	registerBool("L", "follow", &followRedirects, "Follow redirects")
-	registerBool("q", "quiet", &quiet, "Quiet mode")
+	registerBool("S", "silent", &silent, "Silent mode (no output at all, only exit code)")
+	registerBool("q", "quiet", &quiet, "Quiet mode (output body only)")
 	registerBool("v", "verbose", &verbose, "Verbose mode")
 	registerBool("s", "status-only", &statusOnly, "Show only status code")
 	
-	// New flags
+	// Existing extended flags
 	fs.BoolVar(&ignoreMissingEnv, "ignore-missing-env", false, "Do not fail when {{VAR}} is missing")
 	registerInt("r", "retry", &retry, 0, "Number of retries for failed network or 5xx requests")
 	fs.IntVar(&retryDelay, "retry-delay", 2, "Delay in seconds between retries")
 	fs.BoolVar(&dryRun, "dry-run", false, "Print request without execution")
+
+	// New gap-coverage flags
+	fs.StringVar(&format, "format", "", "Output format: 'json' for structured output")
+	registerBool("F", "fail", &fail, "Exit with code 22 on HTTP 4xx/5xx responses")
+	fs.BoolVar(&raw, "raw", false, "Output raw response body only (no headers, colors, or formatting)")
+	registerStr("x", "extract", &extract, "", "Extract a value from JSON response (dot notation: .data.token)")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -103,8 +126,22 @@ func ParseFlags(args []string) (*Config, error) {
 	}
 	LoadEnv(env)
 
+	// Handle @- (stdin) and @file body syntax
 	finalBody := body
-	if bodyFile != "" {
+	if body == "@-" {
+		stdinData, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return nil, fmt.Errorf("error reading stdin: %w", err)
+		}
+		finalBody = strings.TrimSpace(string(stdinData))
+	} else if strings.HasPrefix(body, "@") && body != "@-" {
+		filePath := body[1:]
+		fileContent, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("error reading body file '%s': %w", filePath, err)
+		}
+		finalBody = string(fileContent)
+	} else if bodyFile != "" {
 		fileContent, err := os.ReadFile(bodyFile)
 		if err != nil {
 			return nil, fmt.Errorf("error reading file: %w", err)
@@ -123,6 +160,7 @@ func ParseFlags(args []string) (*Config, error) {
 		BearerToken:      bearerToken,
 		BasicAuth:        basicAuth,
 		OutputFile:       outputFile,
+		Silent:           silent,
 		Quiet:            quiet,
 		Verbose:          verbose,
 		StatusOnly:       statusOnly,
@@ -131,6 +169,10 @@ func ParseFlags(args []string) (*Config, error) {
 		Retry:            retry,
 		RetryDelay:       retryDelay,
 		DryRun:           dryRun,
+		Format:           format,
+		Fail:             fail,
+		Raw:              raw,
+		Extract:          extract,
 	}
 
 	if err := cfg.InterpolateAll(); err != nil {
@@ -144,6 +186,9 @@ func ParseFlags(args []string) (*Config, error) {
 func (c *Config) Validate() error {
 	if c.URL == "" {
 		return fmt.Errorf("URL is required")
+	}
+	if c.Format != "" && c.Format != "json" {
+		return fmt.Errorf("unsupported format %q (supported: json)", c.Format)
 	}
 	return nil
 }

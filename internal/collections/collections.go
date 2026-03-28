@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/I-invincib1e/httli/internal/config"
+	"github.com/I-invincib1e/httli/internal/storage"
 )
 
 type Storage struct {
@@ -21,25 +22,18 @@ type RequestData struct {
 	Body    string            `json:"body,omitempty"`
 }
 
-var storagePath string
-
-func init() {
-	home, err := os.UserHomeDir()
-	if err == nil {
-		storagePath = filepath.Join(home, ".httli", "collections.json")
-	}
+// storagePath returns the resolved path (project-local or global)
+func storagePath() string {
+	return storage.ResolvePath("collections.json")
 }
 
 // InitStorage ensures the storage directory and file exist
 func InitStorage() error {
-	if storagePath == "" {
-		return fmt.Errorf("could not determine home directory")
-	}
-	dir := filepath.Dir(storagePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	path := storagePath()
+	if err := storage.EnsureDir(path); err != nil {
 		return err
 	}
-	if _, err := os.Stat(storagePath); os.IsNotExist(err) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
 		initial := Storage{Requests: make(map[string]RequestData)}
 		return saveStorage(initial)
 	}
@@ -48,7 +42,7 @@ func InitStorage() error {
 
 func loadStorage() (Storage, error) {
 	var s Storage
-	data, err := os.ReadFile(storagePath)
+	data, err := os.ReadFile(storagePath())
 	if err != nil {
 		return s, err
 	}
@@ -64,15 +58,18 @@ func saveStorage(s Storage) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(storagePath, data, 0644)
+	return os.WriteFile(storagePath(), data, 0644)
 }
 
 func normalizeName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	name = strings.ToLower(name)
+	// Allow single / for namespacing (auth/login), reject // and empty
 	if strings.Contains(name, "//") || name == "" {
 		return "", fmt.Errorf("invalid collection name format: '%s'", name)
 	}
+	// Trim trailing slash
+	name = strings.TrimRight(name, "/")
 	return name, nil
 }
 
@@ -187,17 +184,75 @@ func GetRequest(rawName string) (*config.Config, error) {
 	return cfg, nil
 }
 
-// ListCollections lists available saved requests
+// ListCollections lists available saved requests, grouped by namespace
 func ListCollections() {
 	s, err := loadStorage()
 	if err != nil || len(s.Requests) == 0 {
 		fmt.Println("No collections found. Use 'httli collection save <name> [options]' to create one.")
 		return
 	}
+
+	// Collect and sort names
+	var names []string
+	for name := range s.Requests {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	// Group by namespace prefix
+	groups := make(map[string][]string) // prefix → list of full names
+	var ungrouped []string
+
+	for _, name := range names {
+		if idx := strings.Index(name, "/"); idx > 0 {
+			prefix := name[:idx]
+			groups[prefix] = append(groups[prefix], name)
+		} else {
+			ungrouped = append(ungrouped, name)
+		}
+	}
+
 	fmt.Println("Saved Requests:")
-	for name, req := range s.Requests {
+
+	// Print ungrouped first
+	for _, name := range ungrouped {
+		req := s.Requests[name]
 		fmt.Printf("  - %s [%s %s]\n", name, req.Method, req.URL)
 	}
+
+	// Print grouped by namespace
+	var prefixes []string
+	for p := range groups {
+		prefixes = append(prefixes, p)
+	}
+	sort.Strings(prefixes)
+
+	for _, prefix := range prefixes {
+		fmt.Printf("\n  %s/\n", prefix)
+		for _, name := range groups[prefix] {
+			req := s.Requests[name]
+			shortName := name[len(prefix)+1:] // strip prefix/
+			fmt.Printf("    - %s [%s %s]\n", shortName, req.Method, req.URL)
+		}
+	}
+
+	if storage.IsProjectLocal() {
+		fmt.Printf("\n  (project-local: %s)\n", storagePath())
+	}
+}
+
+// ListAllNames returns all collection names (for run-all pattern matching)
+func ListAllNames() ([]string, error) {
+	s, err := loadStorage()
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for name := range s.Requests {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // ExportCollections writes all collections to a file
@@ -261,4 +316,3 @@ func ImportCollections(path string, mode string) error {
 	fmt.Printf("Import complete: %d added, %d skipped, %d overwritten\n", added, skipped, overwritten)
 	return nil
 }
-

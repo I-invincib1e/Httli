@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/I-invincib1e/httli/internal/client"
 	"github.com/I-invincib1e/httli/internal/collections"
@@ -140,7 +141,15 @@ var CollectionRunCmd = &Command{
 		cfg.Retry = runCfg.Retry
 		cfg.RetryDelay = runCfg.RetryDelay
 		cfg.DryRun = runCfg.DryRun
-		if runCfg.Timeout != 30 && runCfg.Timeout != 0 {
+		cfg.Format = runCfg.Format
+		cfg.Fail = runCfg.Fail
+		cfg.Raw = runCfg.Raw
+		cfg.Extract = runCfg.Extract
+		cfg.Quiet = runCfg.Quiet
+		cfg.StatusOnly = runCfg.StatusOnly
+		cfg.Verbose = runCfg.Verbose
+		
+		if runCfg.Timeout != 30*time.Second && runCfg.Timeout != 0 {
 			cfg.Timeout = runCfg.Timeout
 		}
 
@@ -173,6 +182,11 @@ var CollectionRunCmd = &Command{
 			fmt.Fprintf(os.Stderr, "Error displaying response: %v\n", err)
 			os.Exit(1)
 		}
+
+		if cfg.Fail && resp.StatusCode >= 400 {
+			os.Exit(22)
+		}
+
 		os.Exit(0)
 	},
 }
@@ -235,6 +249,7 @@ func init() {
 	CollectionCmd.AddCommand(CollectionShowCmd)
 	CollectionCmd.AddCommand(CollectionListCmd)
 	CollectionCmd.AddCommand(CollectionRunCmd)
+	CollectionCmd.AddCommand(CollectionRunAllCmd) // Defined in collection_runall.go
 	CollectionCmd.AddCommand(CollectionExportCmd)
 	CollectionCmd.AddCommand(CollectionImportCmd)
 	RootCmd.AddCommand(CollectionCmd)

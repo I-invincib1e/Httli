@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
+
+	"github.com/I-invincib1e/httli/internal/storage"
 )
 
 const maxHistory = 50
@@ -17,17 +18,13 @@ type Entry struct {
 	Status    int    `json:"status"`
 }
 
-var historyPath string
-
-func init() {
-	home, err := os.UserHomeDir()
-	if err == nil {
-		historyPath = filepath.Join(home, ".httli", "history.json")
-	}
+// historyPath returns the resolved path (project-local or global)
+func historyPath() string {
+	return storage.ResolvePath("history.json")
 }
 
 func loadHistory() ([]Entry, error) {
-	data, err := os.ReadFile(historyPath)
+	data, err := os.ReadFile(historyPath())
 	if err != nil {
 		return nil, nil // no history yet
 	}
@@ -39,15 +36,15 @@ func loadHistory() ([]Entry, error) {
 }
 
 func saveHistory(entries []Entry) error {
-	dir := filepath.Dir(historyPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	path := historyPath()
+	if err := storage.EnsureDir(path); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(historyPath, data, 0644)
+	return os.WriteFile(path, data, 0644)
 }
 
 // Record appends a new entry to history (sliding window of maxHistory)
@@ -66,13 +63,33 @@ func Record(method, url string, status int) {
 	_ = saveHistory(entries)
 }
 
-// List prints all history entries
+// List prints all history entries (supports --format json)
 func List() {
+	ListWithFormat("")
+}
+
+// ListWithFormat prints all history entries in the given format
+func ListWithFormat(format string) {
 	entries, err := loadHistory()
 	if err != nil || len(entries) == 0 {
-		fmt.Println("No request history found.")
+		if format == "json" {
+			fmt.Println("[]")
+		} else {
+			fmt.Println("No request history found.")
+		}
 		return
 	}
+
+	if format == "json" {
+		data, err := json.MarshalIndent(entries, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return
+		}
+		fmt.Println(string(data))
+		return
+	}
+
 	fmt.Println("Request History:")
 	for i, e := range entries {
 		statusIcon := "✓"
@@ -103,8 +120,9 @@ func Show(index int) (*Entry, error) {
 
 // Clear removes all history
 func Clear() error {
-	if historyPath == "" {
+	path := historyPath()
+	if path == "" {
 		return fmt.Errorf("could not determine history path")
 	}
-	return os.Remove(historyPath)
+	return os.Remove(path)
 }

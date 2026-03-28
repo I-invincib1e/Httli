@@ -46,7 +46,7 @@ func ExecuteRequest(cfg *config.Config) (*Response, error) {
 		return nil, err
 	}
 
-	httpClient := &http.Client{Timeout: time.Duration(cfg.Timeout) * time.Second}
+	httpClient := &http.Client{Timeout: cfg.Timeout}
 	if !cfg.FollowRedirects {
 		httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse

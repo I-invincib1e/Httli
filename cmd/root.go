@@ -13,6 +13,8 @@ type Command struct {
 	Short   string
 	Long    string // optional detailed description
 	Run     func(args []string)
+	PreRun  func(args []string) error // optional: runs before Run, aborts on error
+	PostRun func(args []string)       // optional: runs after Run
 	Subs    map[string]*Command
 	Aliases []string
 }
@@ -62,6 +64,47 @@ func (c *Command) PrintHelp() {
 	fmt.Fprintf(os.Stderr, "\nUse \"%s [command] --help\" for more information.\n", c.Use)
 }
 
+// isHelp checks if an argument is a help flag
+func isHelp(arg string) bool {
+	return arg == "help" || arg == "--help" || arg == "-h"
+}
+
+// Execute recursively dispatches to the correct subcommand.
+// This replaces the old flat if/else chain with an N-depth recursive walker.
+func (c *Command) Execute(args []string) {
+	// Check help
+	if len(args) > 0 && isHelp(args[0]) {
+		c.PrintHelp()
+		return
+	}
+
+	// Try subcommand dispatch
+	if len(args) > 0 {
+		if sub, ok := c.Subs[args[0]]; ok {
+			sub.Execute(args[1:])
+			return
+		}
+	}
+
+	// Run self (with hooks)
+	if c.Run != nil {
+		if c.PreRun != nil {
+			if err := c.PreRun(args); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+		}
+		c.Run(args)
+		if c.PostRun != nil {
+			c.PostRun(args)
+		}
+		return
+	}
+
+	// No Run function — show help
+	c.PrintHelp()
+}
+
 // collectCommandNames dynamically gathers all top-level command names
 func collectCommandNames(c *Command) []string {
 	var names []string
@@ -92,50 +135,20 @@ func Execute(args []string) {
 	}
 
 	if len(args) == 0 {
-		RootCmd.Run(args)
+		RootCmd.Execute(args)
 		return
 	}
 
 	arg := args[0]
-	if arg == "help" || arg == "--help" || arg == "-h" {
-		RootCmd.PrintHelp()
-		return
-	}
 
-	if sub, ok := RootCmd.Subs[arg]; ok {
-		if len(args) > 1 {
-			subArg := args[1]
-			if subArg == "--help" || subArg == "-h" || subArg == "help" {
-				sub.PrintHelp()
-				return
-			}
-			if sub.Subs != nil {
-				if subSub, subOk := sub.Subs[subArg]; subOk {
-					if len(args) > 2 && (args[2] == "--help" || args[2] == "-h") {
-						subSub.PrintHelp()
-						return
-					}
-					subSub.Run(args[2:])
-					return
-				}
-			}
-		}
-		sub.Run(args[1:])
-		return
-	}
-
+	// If it starts with a flag (dash), treat as a direct request
 	if strings.HasPrefix(arg, "-") {
 		RequestSendCmd.Run(args)
 		return
 	}
 
-	suggestion := findClosestCommand(arg, RootCmd.Subs)
-	fmt.Fprintf(os.Stderr, "Error: unknown command %q for \"httli\"\n", arg)
-	if suggestion != "" {
-		fmt.Fprintf(os.Stderr, "\nDid you mean this?\n\t%s\n", suggestion)
-	}
-	fmt.Fprintf(os.Stderr, "\nRun 'httli --help' for usage.\n")
-	os.Exit(1)
+	// Delegate to recursive dispatch
+	RootCmd.Execute(args)
 }
 
 func findClosestCommand(arg string, subs map[string]*Command) string {
@@ -185,11 +198,24 @@ func levenshtein(s, t string) int {
 }
 
 func init() {
+	// Override default Run to handle flag-only invocations
 	RootCmd.Run = func(args []string) {
 		if len(args) > 0 && strings.HasPrefix(args[0], "-") {
 			RequestSendCmd.Run(args)
 			return
 		}
+
+		// Check for unknown commands and suggest
+		if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+			suggestion := findClosestCommand(args[0], RootCmd.Subs)
+			fmt.Fprintf(os.Stderr, "Error: unknown command %q for \"httli\"\n", args[0])
+			if suggestion != "" {
+				fmt.Fprintf(os.Stderr, "\nDid you mean this?\n\t%s\n", suggestion)
+			}
+			fmt.Fprintf(os.Stderr, "\nRun 'httli --help' for usage.\n")
+			os.Exit(1)
+		}
+
 		RootCmd.PrintHelp()
 	}
 }

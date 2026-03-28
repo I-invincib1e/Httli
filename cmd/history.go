@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
+	"github.com/I-invincib1e/httli/internal/client"
 	"github.com/I-invincib1e/httli/internal/config"
 	"github.com/I-invincib1e/httli/internal/history"
-	"github.com/I-invincib1e/httli/internal/client"
 	"github.com/I-invincib1e/httli/internal/output"
 	"github.com/I-invincib1e/httli/internal/styles"
 )
@@ -19,7 +20,12 @@ var HistoryCmd = &Command{
 
 The last 50 requests are saved automatically with status codes and timestamps.`,
 	Run: func(args []string) {
-		history.List()
+		cfg, err := config.ParseFlags(args)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		history.ListWithFormat(cfg.Format)
 		os.Exit(0)
 	},
 }
@@ -64,7 +70,7 @@ var RerunCmd = &Command{
 	Long:  "Re-execute a previous request by its history index number.",
 	Run: func(args []string) {
 		if len(args) < 1 {
-			fmt.Fprintf(os.Stderr, "Usage: httli rerun <index>\n")
+			fmt.Fprintf(os.Stderr, "Usage: httli rerun <index> [flags]\n")
 			os.Exit(1)
 		}
 		idx, err := strconv.Atoi(args[0])
@@ -72,6 +78,13 @@ var RerunCmd = &Command{
 			fmt.Fprintf(os.Stderr, "Error: invalid index %q\n", args[0])
 			os.Exit(1)
 		}
+
+		runCfg, err := config.ParseFlags(args[1:])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
 		entry, err := history.Show(idx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -82,11 +95,37 @@ var RerunCmd = &Command{
 			Method:  entry.Method,
 			URL:     entry.URL,
 			Headers: make(map[string]string),
-			Timeout: 30,
+			Timeout: 30 * time.Second, // Default base
+		}
+
+		// Apply overrides from runCfg
+		cfg.IgnoreMissingEnv = runCfg.IgnoreMissingEnv
+		cfg.Retry = runCfg.Retry
+		cfg.RetryDelay = runCfg.RetryDelay
+		cfg.DryRun = runCfg.DryRun
+		cfg.Format = runCfg.Format
+		cfg.Fail = runCfg.Fail
+		cfg.Raw = runCfg.Raw
+		cfg.Extract = runCfg.Extract
+		cfg.Quiet = runCfg.Quiet
+		cfg.StatusOnly = runCfg.StatusOnly
+		cfg.Verbose = runCfg.Verbose
+		if runCfg.Timeout != 30*time.Second && runCfg.Timeout != 0 {
+			cfg.Timeout = runCfg.Timeout
+		}
+
+		if err := cfg.InterpolateAll(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error interpolating: %v\n", err)
+			os.Exit(1)
 		}
 
 		st := styles.New()
 		output.DisplayRequest(cfg, st)
+
+		if cfg.DryRun {
+			fmt.Println("\n[Dry Run] Request fully interpolated, no network call made.")
+			os.Exit(0)
+		}
 
 		resp, err := client.ExecuteRequest(cfg)
 		if err != nil {
@@ -100,6 +139,11 @@ var RerunCmd = &Command{
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		if cfg.Fail && resp.StatusCode >= 400 {
+			os.Exit(22)
+		}
+
 		os.Exit(0)
 	},
 }

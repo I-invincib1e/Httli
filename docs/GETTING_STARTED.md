@@ -5,6 +5,7 @@ This guide walks you through installing, configuring, and making your first API 
 ## Installation
 
 ### Prerequisites
+
 - [Go 1.21+](https://go.dev/dl/) installed
 - Git installed
 
@@ -71,6 +72,24 @@ BASE_URL=https://jsonplaceholder.typicode.com
 Now use variables in your requests:
 ```bash
 ./httli -u '{{BASE_URL}}/posts/1'
+```
+
+## Scripting and CI
+
+`httli` is designed not just for humans, but for robust CI/CD pipelines.
+
+```bash
+# Return exit code 22 if the status is a 404 (or any 4xx/5xx)
+./httli -u https://api.example.com/status/404 --fail
+
+# Return ONLY the status code, suppressing all other output
+./httli -u https://api.example.com/status/200 --status-only
+
+# Complete silence, only standard exit codes
+./httli -u https://api.example.com/ping --silent
+
+# Produce scriptable JSON output (has an `.ok` field)
+./httli -u https://api.example.com/data --format json | jq '.ok'
 ```
 
 ## Enable Shell Autocomplete

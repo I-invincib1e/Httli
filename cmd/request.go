@@ -56,6 +56,12 @@ var RequestSendCmd = &Command{
 			fmt.Fprintf(os.Stderr, "Error displaying response: %v\n", err)
 			os.Exit(1)
 		}
+
+		// --fail: exit 22 on HTTP 4xx/5xx (curl convention)
+		if cfg.Fail && resp.StatusCode >= 400 {
+			os.Exit(22)
+		}
+
 		os.Exit(0)
 	},
 }
