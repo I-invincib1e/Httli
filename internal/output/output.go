@@ -6,9 +6,9 @@ import (
     "os"
     "strings"
 
-    "github.com/I-invincib1e/http-cli/internal/client"
-    "github.com/I-invincib1e/http-cli/internal/config"
-    "github.com/I-invincib1e/http-cli/internal/styles"
+    "github.com/I-invincib1e/httli/internal/client"
+    "github.com/I-invincib1e/httli/internal/config"
+    "github.com/I-invincib1e/httli/internal/styles"
     "github.com/charmbracelet/lipgloss"
 )
 

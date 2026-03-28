@@ -12,7 +12,7 @@ Thank you for your interest in contributing! This document provides guidelines a
    ```
 3. **Build** the project:
    ```bash
-   go build -o http-cli ./cmd/http-cli/main.go
+   go build -o httli ./cmd/httli/main.go
    ```
 4. **Create a branch** for your feature:
    ```bash
@@ -38,21 +38,21 @@ assets/         → Images and visual assets
 
 ### Building
 ```bash
-go build -o http-cli ./cmd/http-cli/main.go
+go build -o httli ./cmd/httli/main.go
 ```
 
 ### Testing your changes
 ```bash
 # Run a simple request
-./http-cli -u https://jsonplaceholder.typicode.com/posts/1
+./httli -u https://jsonplaceholder.typicode.com/posts/1
 
 # Test collection workflow
-./http-cli collection save test/ping -u https://httpbin.org/get
-./http-cli collection run test/ping
-./http-cli collection delete test/ping
+./httli collection save test/ping -u https://httpbin.org/get
+./httli collection run test/ping
+./httli collection delete test/ping
 
 # Test history
-./http-cli history
+./httli history
 ```
 
 ### Code Style

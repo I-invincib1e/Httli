@@ -12,12 +12,12 @@ This guide walks you through installing, configuring, and making your first API 
 ```bash
 git clone https://github.com/I-invincib1e/Httli.git
 cd Httli
-go build -o http-cli ./cmd/http-cli/main.go
+go build -o httli ./cmd/httli/main.go
 ```
 
 ### Verify installation
 ```bash
-./http-cli --help
+./httli --help
 ```
 
 You should see the full command tree with `request`, `collection`, `env`, `history`, and `completion` commands.
@@ -25,7 +25,7 @@ You should see the full command tree with `request`, `collection`, `env`, `histo
 ## Your First Request
 
 ```bash
-./http-cli -u https://jsonplaceholder.typicode.com/posts/1
+./httli -u https://jsonplaceholder.typicode.com/posts/1
 ```
 
 This makes a GET request and displays the response with beautiful color-coded output:
@@ -36,7 +36,7 @@ This makes a GET request and displays the response with beautiful color-coded ou
 ## POST Request with JSON
 
 ```bash
-./http-cli -m POST \
+./httli -m POST \
   -u https://jsonplaceholder.typicode.com/posts \
   -d '{"title":"Hello","body":"World","userId":1}'
 ```
@@ -45,20 +45,20 @@ This makes a GET request and displays the response with beautiful color-coded ou
 
 ```bash
 # Bearer token
-./http-cli -u https://api.example.com/me -b "your-jwt-token"
+./httli -u https://api.example.com/me -b "your-jwt-token"
 
 # Basic auth
-./http-cli -u https://api.example.com/me -a "admin:password123"
+./httli -u https://api.example.com/me -a "admin:password123"
 ```
 
 ## Save and Reuse Requests
 
 ```bash
 # Save a request
-./http-cli collection save my-api/users -m GET -u https://jsonplaceholder.typicode.com/users
+./httli collection save my-api/users -m GET -u https://jsonplaceholder.typicode.com/users
 
 # Run it anytime
-./http-cli collection run my-api/users
+./httli collection run my-api/users
 ```
 
 ## Set Up Environments
@@ -70,17 +70,17 @@ BASE_URL=https://jsonplaceholder.typicode.com
 
 Now use variables in your requests:
 ```bash
-./http-cli -u '{{BASE_URL}}/posts/1'
+./httli -u '{{BASE_URL}}/posts/1'
 ```
 
 ## Enable Shell Autocomplete
 
 ```bash
 # Bash
-source <(./http-cli completion bash)
+source <(./httli completion bash)
 
 # PowerShell
-./http-cli completion powershell | Out-String | Invoke-Expression
+./httli completion powershell | Out-String | Invoke-Expression
 ```
 
 ## Next Steps

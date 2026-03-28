@@ -5,11 +5,11 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/I-invincib1e/http-cli/internal/config"
-	"github.com/I-invincib1e/http-cli/internal/history"
-	"github.com/I-invincib1e/http-cli/internal/client"
-	"github.com/I-invincib1e/http-cli/internal/output"
-	"github.com/I-invincib1e/http-cli/internal/styles"
+	"github.com/I-invincib1e/httli/internal/config"
+	"github.com/I-invincib1e/httli/internal/history"
+	"github.com/I-invincib1e/httli/internal/client"
+	"github.com/I-invincib1e/httli/internal/output"
+	"github.com/I-invincib1e/httli/internal/styles"
 )
 
 var HistoryCmd = &Command{
@@ -29,7 +29,7 @@ var HistoryShowCmd = &Command{
 	Short: "Show details of a history entry",
 	Run: func(args []string) {
 		if len(args) < 1 {
-			fmt.Fprintf(os.Stderr, "Usage: http-cli history show <index>\n")
+			fmt.Fprintf(os.Stderr, "Usage: httli history show <index>\n")
 			os.Exit(1)
 		}
 		idx, err := strconv.Atoi(args[0])
@@ -64,7 +64,7 @@ var RerunCmd = &Command{
 	Long:  "Re-execute a previous request by its history index number.",
 	Run: func(args []string) {
 		if len(args) < 1 {
-			fmt.Fprintf(os.Stderr, "Usage: http-cli rerun <index>\n")
+			fmt.Fprintf(os.Stderr, "Usage: httli rerun <index>\n")
 			os.Exit(1)
 		}
 		idx, err := strconv.Atoi(args[0])

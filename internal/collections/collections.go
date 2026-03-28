@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/I-invincib1e/http-cli/internal/config"
+	"github.com/I-invincib1e/httli/internal/config"
 )
 
 type Storage struct {
@@ -191,7 +191,7 @@ func GetRequest(rawName string) (*config.Config, error) {
 func ListCollections() {
 	s, err := loadStorage()
 	if err != nil || len(s.Requests) == 0 {
-		fmt.Println("No collections found. Use 'http-cli collection save <name> [options]' to create one.")
+		fmt.Println("No collections found. Use 'httli collection save <name> [options]' to create one.")
 		return
 	}
 	fmt.Println("Saved Requests:")

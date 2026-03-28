@@ -27,11 +27,11 @@ HTTP CLI is a fast, beautiful, and **zero-dependency** command-line HTTP client 
 
 ```bash
 # Simple request
-http-cli -u https://api.github.com/users/octocat
+httli -u https://api.github.com/users/octocat
 
 # Save, reuse, and share API workflows
-http-cli collection save auth/login -m POST -u {{BASE_URL}}/login -d '{"user":"admin"}'
-http-cli collection run auth/login --env prod
+httli collection save auth/login -m POST -u {{BASE_URL}}/login -d '{"user":"admin"}'
+httli collection run auth/login --env prod
 ```
 
 ---
@@ -43,30 +43,30 @@ http-cli collection run auth/login --env prod
 ```bash
 git clone https://github.com/I-invincib1e/Httli.git
 cd Httli
-go build -o http-cli ./cmd/http-cli/main.go
+go build -o httli ./cmd/httli/main.go
 ```
 
 ### Add to PATH (optional)
 
 ```bash
 # Linux/macOS
-sudo mv http-cli /usr/local/bin/
+sudo mv httli /usr/local/bin/
 
 # Windows (PowerShell as Admin)
-Move-Item http-cli.exe C:\Windows\System32\
+Move-Item httli.exe C:\Windows\System32\
 ```
 
 ### Enable Shell Autocomplete
 
 ```bash
 # Bash
-source <(http-cli completion bash)
+source <(httli completion bash)
 
 # Zsh
-source <(http-cli completion zsh)
+source <(httli completion zsh)
 
 # PowerShell
-http-cli completion powershell | Out-String | Invoke-Expression
+httli completion powershell | Out-String | Invoke-Expression
 ```
 
 ---
@@ -76,25 +76,25 @@ http-cli completion powershell | Out-String | Invoke-Expression
 ### Your first request
 
 ```bash
-http-cli -u https://jsonplaceholder.typicode.com/posts/1
+httli -u https://jsonplaceholder.typicode.com/posts/1
 ```
 
 ### Using subcommands
 
 ```bash
-http-cli request send -m GET -u https://api.github.com/users/octocat
+httli request send -m GET -u https://api.github.com/users/octocat
 ```
 
 ### Quick reference
 
 | Command | Description |
 |---------|-------------|
-| `http-cli -u <url>` | Quick GET request |
-| `http-cli request send [flags]` | Full request with all options |
-| `http-cli collection [command]` | Manage saved requests |
-| `http-cli history` | View request history |
-| `http-cli rerun <n>` | Re-execute from history |
-| `http-cli completion <shell>` | Generate autocomplete scripts |
+| `httli -u <url>` | Quick GET request |
+| `httli request send [flags]` | Full request with all options |
+| `httli collection [command]` | Manage saved requests |
+| `httli history` | View request history |
+| `httli rerun <n>` | Re-execute from history |
+| `httli completion <shell>` | Generate autocomplete scripts |
 
 ---
 
@@ -109,37 +109,37 @@ http-cli request send -m GET -u https://api.github.com/users/octocat
 
 ### All HTTP Methods
 ```bash
-http-cli -m POST -u https://api.example.com/users -d '{"name":"John"}'
-http-cli -m PUT -u https://api.example.com/users/1 -d '{"name":"Jane"}'
-http-cli -m DELETE -u https://api.example.com/users/1
-http-cli -m PATCH -u https://api.example.com/users/1 -d '{"role":"admin"}'
+httli -m POST -u https://api.example.com/users -d '{"name":"John"}'
+httli -m PUT -u https://api.example.com/users/1 -d '{"name":"Jane"}'
+httli -m DELETE -u https://api.example.com/users/1
+httli -m PATCH -u https://api.example.com/users/1 -d '{"role":"admin"}'
 ```
 
 ### Authentication
 ```bash
 # Bearer token
-http-cli -u https://api.example.com/data -b "your-token-here"
+httli -u https://api.example.com/data -b "your-token-here"
 
 # Basic auth
-http-cli -u https://api.example.com/data -a "username:password"
+httli -u https://api.example.com/data -a "username:password"
 ```
 
 ### Dry Run
 Preview your fully interpolated request without hitting the network:
 ```bash
-http-cli request send --dry-run -u {{BASE_URL}}/admin -b {{API_TOKEN}}
+httli request send --dry-run -u {{BASE_URL}}/admin -b {{API_TOKEN}}
 ```
 
 ### Smart Retry
 Automatically retry on network failures and 5xx server errors:
 ```bash
-http-cli -u https://api.example.com/data --retry 3 --retry-delay 2
+httli -u https://api.example.com/data --retry 3 --retry-delay 2
 ```
 
 ### JSON Validation
 Catches invalid JSON bodies **before** making the network request:
 ```bash
-http-cli -m POST -u https://api.example.com -d '{invalid'
+httli -m POST -u https://api.example.com -d '{invalid'
 # Error: invalid JSON body provided
 ```
 
@@ -153,7 +153,7 @@ Save, organize, and replay your API requests like Postman — in the terminal.
 
 ### Save a request (fails if it already exists)
 ```bash
-http-cli collection save auth/login \
+httli collection save auth/login \
   -m POST \
   -u {{BASE_URL}}/auth/login \
   -d '{"email":"admin@example.com","password":"secret"}'
@@ -161,38 +161,38 @@ http-cli collection save auth/login \
 
 ### Update an existing request
 ```bash
-http-cli collection update auth/login -d '{"email":"new@example.com","password":"new"}'
+httli collection update auth/login -d '{"email":"new@example.com","password":"new"}'
 ```
 
 ### Run a saved request
 ```bash
-http-cli collection run auth/login --env prod
+httli collection run auth/login --env prod
 ```
 
 ### List all saved requests
 ```bash
-http-cli collection list
+httli collection list
 ```
 
 ### Show request details (formatted)
 ```bash
-http-cli collection show auth/login
+httli collection show auth/login
 ```
 
 ### Delete a request
 ```bash
-http-cli collection delete auth/login
+httli collection delete auth/login
 ```
 
 ### Export & Import (share with your team!)
 ```bash
 # Export
-http-cli collection export team-api.json
+httli collection export team-api.json
 
 # Import with conflict handling
-http-cli collection import team-api.json              # merge (default)
-http-cli collection import team-api.json --overwrite   # replace conflicts
-http-cli collection import team-api.json --skip        # skip conflicts
+httli collection import team-api.json              # merge (default)
+httli collection import team-api.json --overwrite   # replace conflicts
+httli collection import team-api.json --skip        # skip conflicts
 ```
 
 ---
@@ -225,10 +225,10 @@ API_TOKEN=prod-token-abc
 ### Usage
 ```bash
 # Uses .env + .env.local
-http-cli -u {{BASE_URL}}/users -b {{API_TOKEN}}
+httli -u {{BASE_URL}}/users -b {{API_TOKEN}}
 
 # Uses .env + .env.local + .env.prod
-http-cli collection run auth/login --env prod
+httli collection run auth/login --env prod
 ```
 
 ### Global default environment
@@ -256,16 +256,16 @@ Every executed request is automatically saved with rich metadata.
 
 ```bash
 # View history
-http-cli history
+httli history
 
 # Inspect a specific entry
-http-cli history show 1
+httli history show 1
 
 # Re-execute a previous request
-http-cli rerun 1
+httli rerun 1
 
 # Clear history
-http-cli history clear
+httli history clear
 ```
 
 History entries include: timestamp, HTTP method, URL, and response status code. The last **50 requests** are retained automatically.
@@ -300,9 +300,9 @@ History entries include: timestamp, HTTP method, URL, and response status code. 
 ## 🏗️ Architecture
 
 ```
-http-cli
+httli
 ├── cmd/
-│   ├── http-cli/main.go   # Entrypoint
+│   ├── httli/main.go   # Entrypoint
 │   ├── root.go             # Command router + Levenshtein suggestions
 │   ├── request.go          # request send
 │   ├── collection.go       # collection save/run/list/show/update/delete/export/import

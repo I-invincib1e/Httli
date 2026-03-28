@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/I-invincib1e/http-cli/cmd"
+	"github.com/I-invincib1e/httli/cmd"
 )
 
 func main() {

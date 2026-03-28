@@ -51,13 +51,13 @@ Variables use `{{VAR_NAME}}` syntax and work in:
 ### Examples
 ```bash
 # Direct request
-http-cli -u '{{BASE_URL}}/users' -b '{{API_TOKEN}}'
+httli -u '{{BASE_URL}}/users' -b '{{API_TOKEN}}'
 
 # With specific environment
-http-cli -u '{{BASE_URL}}/users' --env prod
+httli -u '{{BASE_URL}}/users' --env prod
 
 # Saved request with env
-http-cli collection run auth/login --env staging
+httli collection run auth/login --env staging
 ```
 
 ## Strict Variable Checking
@@ -72,7 +72,7 @@ This prevents silent bugs from unresolved variables hitting your API.
 
 ### Bypass strict checking
 ```bash
-http-cli -u '{{BASE_URL}}/data' --ignore-missing-env
+httli -u '{{BASE_URL}}/data' --ignore-missing-env
 ```
 
 ## Global Default Environment

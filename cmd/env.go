@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/I-invincib1e/http-cli/internal/config"
+	"github.com/I-invincib1e/httli/internal/config"
 )
 
 var EnvCmd = &Command{
 	Use:   "env",
 	Short: "Manage local environments",
 	Run: func(args []string) {
-		fmt.Fprintf(os.Stderr, "Use 'http-cli env --help' to see subcommands.\n")
+		fmt.Fprintf(os.Stderr, "Use 'httli env --help' to see subcommands.\n")
 	},
 }
 

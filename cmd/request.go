@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/I-invincib1e/http-cli/internal/client"
-	"github.com/I-invincib1e/http-cli/internal/config"
-	"github.com/I-invincib1e/http-cli/internal/history"
-	"github.com/I-invincib1e/http-cli/internal/output"
-	"github.com/I-invincib1e/http-cli/internal/styles"
+	"github.com/I-invincib1e/httli/internal/client"
+	"github.com/I-invincib1e/httli/internal/config"
+	"github.com/I-invincib1e/httli/internal/history"
+	"github.com/I-invincib1e/httli/internal/output"
+	"github.com/I-invincib1e/httli/internal/styles"
 )
 
 var RequestCmd = &Command{

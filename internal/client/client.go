@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/I-invincib1e/http-cli/internal/config"
+	"github.com/I-invincib1e/httli/internal/config"
 )
 
 // Response holds the HTTP response data

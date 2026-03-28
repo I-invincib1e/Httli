@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/I-invincib1e/http-cli/internal/client"
-	"github.com/I-invincib1e/http-cli/internal/collections"
-	"github.com/I-invincib1e/http-cli/internal/config"
-	"github.com/I-invincib1e/http-cli/internal/history"
-	"github.com/I-invincib1e/http-cli/internal/output"
-	"github.com/I-invincib1e/http-cli/internal/styles"
+	"github.com/I-invincib1e/httli/internal/client"
+	"github.com/I-invincib1e/httli/internal/collections"
+	"github.com/I-invincib1e/httli/internal/config"
+	"github.com/I-invincib1e/httli/internal/history"
+	"github.com/I-invincib1e/httli/internal/output"
+	"github.com/I-invincib1e/httli/internal/styles"
 )
 
 var CollectionCmd = &Command{
@@ -24,7 +24,7 @@ var CollectionSaveCmd = &Command{
 	Short: "Save a new request (fails if exists)",
 	Run: func(args []string) {
 		if len(args) < 1 {
-			fmt.Fprintf(os.Stderr, "Error: missing name\nUsage: http-cli collection save <name> [options]\n")
+			fmt.Fprintf(os.Stderr, "Error: missing name\nUsage: httli collection save <name> [options]\n")
 			os.Exit(1)
 		}
 		name := args[0]
@@ -48,7 +48,7 @@ var CollectionUpdateCmd = &Command{
 	Short: "Update an existing request",
 	Run: func(args []string) {
 		if len(args) < 1 {
-			fmt.Fprintf(os.Stderr, "Error: missing name\nUsage: http-cli collection update <name> [options]\n")
+			fmt.Fprintf(os.Stderr, "Error: missing name\nUsage: httli collection update <name> [options]\n")
 			os.Exit(1)
 		}
 		name := args[0]
@@ -72,7 +72,7 @@ var CollectionDeleteCmd = &Command{
 	Short: "Delete a saved request",
 	Run: func(args []string) {
 		if len(args) < 1 {
-			fmt.Fprintf(os.Stderr, "Error: missing name\nUsage: http-cli collection delete <name>\n")
+			fmt.Fprintf(os.Stderr, "Error: missing name\nUsage: httli collection delete <name>\n")
 			os.Exit(1)
 		}
 		name := args[0]
@@ -90,7 +90,7 @@ var CollectionShowCmd = &Command{
 	Short: "Display visually formatted saved request",
 	Run: func(args []string) {
 		if len(args) < 1 {
-			fmt.Fprintf(os.Stderr, "Error: missing name\nUsage: http-cli collection show <name>\n")
+			fmt.Fprintf(os.Stderr, "Error: missing name\nUsage: httli collection show <name>\n")
 			os.Exit(1)
 		}
 		name := args[0]
@@ -119,7 +119,7 @@ var CollectionRunCmd = &Command{
 	Short: "Execute a saved collection request",
 	Run: func(args []string) {
 		if len(args) < 1 {
-			fmt.Fprintf(os.Stderr, "Error: missing name\nUsage: http-cli collection run <name> [flags]\n")
+			fmt.Fprintf(os.Stderr, "Error: missing name\nUsage: httli collection run <name> [flags]\n")
 			os.Exit(1)
 		}
 		name := args[0]
@@ -182,7 +182,7 @@ var CollectionExportCmd = &Command{
 	Short: "Export collections to a JSON file",
 	Run: func(args []string) {
 		if len(args) < 1 {
-			fmt.Fprintf(os.Stderr, "Usage: http-cli collection export <file.json>\n")
+			fmt.Fprintf(os.Stderr, "Usage: httli collection export <file.json>\n")
 			os.Exit(1)
 		}
 		if err := collections.ExportCollections(args[0]); err != nil {
@@ -205,7 +205,7 @@ Conflict modes:
   --skip       Skip all conflicts`,
 	Run: func(args []string) {
 		if len(args) < 1 {
-			fmt.Fprintf(os.Stderr, "Usage: http-cli collection import <file.json> [--overwrite|--skip]\n")
+			fmt.Fprintf(os.Stderr, "Usage: httli collection import <file.json> [--overwrite|--skip]\n")
 			os.Exit(1)
 		}
 		mode := "merge"

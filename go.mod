@@ -1,4 +1,4 @@
-module github.com/I-invincib1e/http-cli
+module github.com/I-invincib1e/httli
 
 go 1.21
 

@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/I-invincib1e/http-cli/internal/config"
+	"github.com/I-invincib1e/httli/internal/config"
 )
 
 type Command struct {
@@ -81,7 +81,7 @@ func collectCommandNames(c *Command) []string {
 }
 
 var RootCmd = &Command{
-	Use:   "http-cli",
+	Use:   "httli",
 	Short: "A fast and colorful HTTP CLI tool",
 	Long:  "HTTP CLI is a zero-dependency, colorful command-line HTTP client\nfor developers who want Postman-like workflows in the terminal.",
 }
@@ -130,11 +130,11 @@ func Execute(args []string) {
 	}
 
 	suggestion := findClosestCommand(arg, RootCmd.Subs)
-	fmt.Fprintf(os.Stderr, "Error: unknown command %q for \"http-cli\"\n", arg)
+	fmt.Fprintf(os.Stderr, "Error: unknown command %q for \"httli\"\n", arg)
 	if suggestion != "" {
 		fmt.Fprintf(os.Stderr, "\nDid you mean this?\n\t%s\n", suggestion)
 	}
-	fmt.Fprintf(os.Stderr, "\nRun 'http-cli --help' for usage.\n")
+	fmt.Fprintf(os.Stderr, "\nRun 'httli --help' for usage.\n")
 	os.Exit(1)
 }
 

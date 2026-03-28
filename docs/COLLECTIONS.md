@@ -5,23 +5,23 @@ Collections let you save, organize, run, export, and share your API requests —
 ## Saving Requests
 
 ```bash
-http-cli collection save <name> [flags]
+httli collection save <name> [flags]
 ```
 
 The `save` command **fails if the request already exists** to prevent accidental overwrites.
 
 ```bash
 # Save a GET request
-http-cli collection save users/list -m GET -u https://api.example.com/users
+httli collection save users/list -m GET -u https://api.example.com/users
 
 # Save a POST request with body
-http-cli collection save users/create \
+httli collection save users/create \
   -m POST \
   -u https://api.example.com/users \
   -d '{"name":"John","email":"john@example.com"}'
 
 # Save with authentication
-http-cli collection save admin/dashboard \
+httli collection save admin/dashboard \
   -u https://api.example.com/admin \
   -b '{{API_TOKEN}}'
 ```
@@ -34,54 +34,54 @@ http-cli collection save admin/dashboard \
 ## Updating Requests
 
 ```bash
-http-cli collection update <name> [flags]
+httli collection update <name> [flags]
 ```
 
 The `update` command **fails if the request doesn't exist** — use `save` first.
 
 ```bash
-http-cli collection update users/create -d '{"name":"Jane","role":"admin"}'
+httli collection update users/create -d '{"name":"Jane","role":"admin"}'
 ```
 
 ## Running Saved Requests
 
 ```bash
-http-cli collection run <name> [flags]
+httli collection run <name> [flags]
 ```
 
 You can override runtime behavior:
 ```bash
 # Run with a specific environment
-http-cli collection run auth/login --env prod
+httli collection run auth/login --env prod
 
 # Run with retries
-http-cli collection run health/check --retry 3 --retry-delay 2
+httli collection run health/check --retry 3 --retry-delay 2
 
 # Dry run (no network call)
-http-cli collection run auth/login --dry-run
+httli collection run auth/login --dry-run
 ```
 
 ## Listing & Inspecting
 
 ```bash
 # List all saved requests
-http-cli collection list
+httli collection list
 
 # Show full details of a request (formatted output)
-http-cli collection show auth/login
+httli collection show auth/login
 ```
 
 ## Deleting Requests
 
 ```bash
-http-cli collection delete auth/login
+httli collection delete auth/login
 ```
 
 ## Export & Import
 
 ### Exporting
 ```bash
-http-cli collection export my-api-collection.json
+httli collection export my-api-collection.json
 ```
 
 This creates a shareable JSON file containing all your saved requests.
@@ -89,25 +89,25 @@ This creates a shareable JSON file containing all your saved requests.
 ### Importing
 ```bash
 # Default: merge (add new, skip existing)
-http-cli collection import team-collection.json
+httli collection import team-collection.json
 
 # Overwrite existing conflicts
-http-cli collection import team-collection.json --overwrite
+httli collection import team-collection.json --overwrite
 
 # Skip all conflicts
-http-cli collection import team-collection.json --skip
+httli collection import team-collection.json --skip
 ```
 
 ### Team Workflow Example
 ```bash
 # Developer A exports their collection
-http-cli collection export api-v2.json
+httli collection export api-v2.json
 git add api-v2.json && git commit -m "Add API collection"
 
 # Developer B imports it
 git pull
-http-cli collection import api-v2.json
-http-cli collection run auth/login --env dev
+httli collection import api-v2.json
+httli collection run auth/login --env dev
 ```
 
 ## Storage
