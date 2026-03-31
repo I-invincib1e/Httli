@@ -55,7 +55,7 @@ var RequestSendCmd = &Command{
 			os.Exit(1)
 		}
 
-		history.Record(cfg.Method, cfg.URL, resp.StatusCode)
+		history.Record(cfg, resp.StatusCode, resp.Duration.Milliseconds())
 
 		if err := output.DisplayResponse(cfg, resp, st); err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying response: %v\n", err)

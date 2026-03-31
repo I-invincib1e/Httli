@@ -91,14 +91,21 @@ var RerunCmd = &Command{
 			os.Exit(1)
 		}
 
+		// Restore the full request config from history
 		cfg := &config.Config{
-			Method:  entry.Method,
-			URL:     entry.URL,
-			Headers: make(map[string]string),
-			Timeout: 30 * time.Second, // Default base
+			Method:      entry.Method,
+			URL:         entry.URL,
+			Headers:     make(map[string]string),
+			Body:        entry.Body,
+			BearerToken: entry.BearerToken,
+			BasicAuth:   entry.BasicAuth,
+			Timeout:     30 * time.Second,
+		}
+		for k, v := range entry.Headers {
+			cfg.Headers[k] = v
 		}
 
-		// Apply overrides from runCfg
+		// Apply any runtime overrides from flags
 		cfg.ApplyOverrides(runCfg)
 
 		if err := cfg.InterpolateAll(); err != nil {
@@ -120,7 +127,7 @@ var RerunCmd = &Command{
 			os.Exit(1)
 		}
 
-		history.Record(cfg.Method, cfg.URL, resp.StatusCode)
+		history.Record(cfg, resp.StatusCode, resp.Duration.Milliseconds())
 
 		if err := output.DisplayResponse(cfg, resp, st); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)

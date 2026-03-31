@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/I-invincib1e/httli/internal/client"
 	"github.com/I-invincib1e/httli/internal/collections"
@@ -161,7 +162,7 @@ var CollectionRunCmd = &Command{
 			os.Exit(1)
 		}
 
-		history.Record(cfg.Method, cfg.URL, resp.StatusCode)
+		history.Record(cfg, resp.StatusCode, resp.Duration.Milliseconds())
 
 		if err := output.DisplayResponse(cfg, resp, st); err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying response: %v\n", err)
@@ -236,6 +237,27 @@ func init() {
 	CollectionCmd.AddCommand(CollectionRunCmd)
 	CollectionCmd.AddCommand(CollectionRunAllCmd) // Defined in collection_runall.go
 	CollectionCmd.AddCommand(CollectionExportCmd)
+	CollectionCmd.AddCommand(CollectionDescribeCmd)
 	CollectionCmd.AddCommand(CollectionImportCmd)
 	RootCmd.AddCommand(CollectionCmd)
+}
+
+var CollectionDescribeCmd = &Command{
+	Use:   "describe",
+	Short: "Set a description for a saved request",
+	Long:  "Annotate a saved request with a human-readable description shown in 'collection list'.",
+	Run: func(args []string) {
+		if len(args) < 2 {
+			fmt.Fprintf(os.Stderr, "Usage: httli collection describe <name> <description>\n")
+			os.Exit(1)
+		}
+		name := args[0]
+		description := strings.Join(args[1:], " ")
+		if err := collections.DescribeRequest(name, description); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Description set for '%s'\n", name)
+		os.Exit(0)
+	},
 }

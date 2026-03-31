@@ -76,10 +76,21 @@ func renderStatus(statusCode int, statusText string) string {
 	return statusStyle.Render(statusText)
 }
 
-// DisplayResponse decides which output mode to use based on config flags
+// DisplayResponse decides which output mode to use based on config flags.
+// --output is orthogonal: it always saves to file regardless of display mode.
 func DisplayResponse(cfg *config.Config, resp *client.Response, st *styles.Styles) error {
 	if cfg.Silent {
 		return nil
+	}
+
+	// --output: always save body to file, independent of display mode
+	if cfg.OutputFile != "" {
+		if err := os.WriteFile(cfg.OutputFile, resp.Body, 0644); err != nil {
+			return fmt.Errorf("error saving file: %w", err)
+		}
+		if !cfg.Quiet && !cfg.StatusOnly && !cfg.Raw && cfg.Format != "json" && cfg.Extract == "" {
+			fmt.Printf("%s %s\n", st.Success.Render("Response saved to:"), cfg.OutputFile)
+		}
 	}
 
 	// --extract: print just the extracted value
@@ -96,16 +107,6 @@ func DisplayResponse(cfg *config.Config, resp *client.Response, st *styles.Style
 	if cfg.Raw {
 		fmt.Print(string(resp.Body))
 		return nil
-	}
-
-	// --output: save to file
-	if cfg.OutputFile != "" {
-		if err := os.WriteFile(cfg.OutputFile, resp.Body, 0644); err != nil {
-			return fmt.Errorf("error saving file: %w", err)
-		}
-		if !cfg.Quiet {
-			fmt.Printf("%s %s\n", st.Success.Render("Response saved to:"), cfg.OutputFile)
-		}
 	}
 
 	// --status-only: just the code
@@ -125,12 +126,10 @@ func DisplayResponse(cfg *config.Config, resp *client.Response, st *styles.Style
 	// Full pretty output
 	fmt.Println(st.Header.Render("RESPONSE"))
 	fmt.Println()
-	fmt.Printf("%s %s\n", renderStatus(resp.StatusCode, "Status:"), renderStatus(resp.StatusCode, fmt.Sprintf("%d %s", resp.StatusCode, resp.Status)))
+	// resp.Status is already "200 OK" — don't add StatusCode again
+	fmt.Printf("%s %s\n", renderStatus(resp.StatusCode, "Status:"), renderStatus(resp.StatusCode, resp.Status))
 	fmt.Printf("%s %s\n", st.Key.Render("Time:"), st.Value.Render(resp.Duration.String()))
-
-	if cfg.Verbose {
-		fmt.Printf("%s %s\n", st.Key.Render("Size:"), st.Value.Render(fmt.Sprintf("%d bytes", len(resp.Body))))
-	}
+	fmt.Printf("%s %s\n", st.Key.Render("Size:"), st.Value.Render(formatSize(len(resp.Body))))
 	fmt.Println()
 
 	if len(resp.Headers) > 0 && cfg.Verbose {
@@ -326,4 +325,16 @@ func FormatJSON(jsonStr string) string {
 	}
 
 	return string(prettyJSON)
+}
+
+// formatSize returns a human-readable byte size string.
+func formatSize(bytes int) string {
+	switch {
+	case bytes >= 1024*1024:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(1024*1024))
+	case bytes >= 1024:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(1024))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
 }

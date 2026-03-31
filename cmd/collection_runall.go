@@ -119,7 +119,7 @@ Examples:
 				continue
 			}
 
-			history.Record(cfg.Method, cfg.URL, resp.StatusCode)
+			history.Record(cfg, resp.StatusCode, duration)
 
 			res := runResult{
 				Name:       name,

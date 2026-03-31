@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/I-invincib1e/httli/internal/config"
 	"github.com/I-invincib1e/httli/internal/storage"
@@ -15,11 +16,23 @@ type Storage struct {
 	Requests map[string]RequestData `json:"requests"`
 }
 
+// RequestData now persists all request fields worth saving.
+// All new fields use omitempty so existing collections.json files
+// deserialize cleanly with zero-valued defaults.
 type RequestData struct {
-	Method  string            `json:"method"`
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Body    string            `json:"body,omitempty"`
+	Method          string            `json:"method"`
+	URL             string            `json:"url"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	Body            string            `json:"body,omitempty"`
+	BearerToken     string            `json:"bearer_token,omitempty"`
+	BasicAuth       string            `json:"basic_auth,omitempty"`
+	TimeoutStr      string            `json:"timeout,omitempty"` // stored as "30s"
+	FollowRedirects bool              `json:"follow_redirects,omitempty"`
+	Retry           int               `json:"retry,omitempty"`
+	RetryDelay      int               `json:"retry_delay,omitempty"`
+	Description     string            `json:"description,omitempty"`
+	CreatedAt       string            `json:"created_at,omitempty"`
+	UpdatedAt       string            `json:"updated_at,omitempty"`
 }
 
 // storagePath returns the resolved path (project-local or global)
@@ -64,11 +77,9 @@ func saveStorage(s Storage) error {
 func normalizeName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	name = strings.ToLower(name)
-	// Allow single / for namespacing (auth/login), reject // and empty
 	if strings.Contains(name, "//") || name == "" {
 		return "", fmt.Errorf("invalid collection name format: '%s'", name)
 	}
-	// Trim trailing slash
 	name = strings.TrimRight(name, "/")
 	return name, nil
 }
@@ -78,7 +89,52 @@ func exists(s Storage, name string) bool {
 	return ok
 }
 
-// SaveRequest saves a parsed config into the collection, failing if it already exists
+// configToRequestData converts a config.Config to a RequestData for storage.
+func configToRequestData(cfg *config.Config) RequestData {
+	rd := RequestData{
+		Method:          cfg.Method,
+		URL:             cfg.URL,
+		Headers:         cfg.Headers,
+		Body:            cfg.Body,
+		BearerToken:     cfg.BearerToken,
+		BasicAuth:       cfg.BasicAuth,
+		FollowRedirects: cfg.FollowRedirects,
+		Retry:           cfg.Retry,
+		RetryDelay:      cfg.RetryDelay,
+	}
+	if cfg.Timeout > 0 {
+		rd.TimeoutStr = cfg.Timeout.String()
+	}
+	return rd
+}
+
+// requestDataToConfig hydrates a config.Config from stored RequestData.
+func requestDataToConfig(req RequestData) *config.Config {
+	cfg := &config.Config{
+		Method:          req.Method,
+		URL:             req.URL,
+		Headers:         make(map[string]string),
+		Body:            req.Body,
+		BearerToken:     req.BearerToken,
+		BasicAuth:       req.BasicAuth,
+		FollowRedirects: req.FollowRedirects,
+		Retry:           req.Retry,
+		RetryDelay:      req.RetryDelay,
+		Timeout:         30 * time.Second, // safe default
+	}
+	// Parse stored timeout string (e.g. "10s", "1m")
+	if req.TimeoutStr != "" {
+		if d, err := time.ParseDuration(req.TimeoutStr); err == nil {
+			cfg.Timeout = d
+		}
+	}
+	for k, v := range req.Headers {
+		cfg.Headers[k] = v
+	}
+	return cfg
+}
+
+// SaveRequest saves a parsed config into the collection, failing if it already exists.
 func SaveRequest(rawName string, cfg *config.Config) error {
 	name, err := normalizeName(rawName)
 	if err != nil {
@@ -96,16 +152,14 @@ func SaveRequest(rawName string, cfg *config.Config) error {
 		return fmt.Errorf("request '%s' already exists, use 'update' instead", name)
 	}
 
-	s.Requests[name] = RequestData{
-		Method:  cfg.Method,
-		URL:     cfg.URL,
-		Headers: cfg.Headers,
-		Body:    cfg.Body,
-	}
+	rd := configToRequestData(cfg)
+	rd.CreatedAt = time.Now().Format(time.RFC3339)
+	rd.UpdatedAt = rd.CreatedAt
+	s.Requests[name] = rd
 	return saveStorage(s)
 }
 
-// UpdateRequest updates an existing request in the collection
+// UpdateRequest updates an existing request in the collection.
 func UpdateRequest(rawName string, cfg *config.Config) error {
 	name, err := normalizeName(rawName)
 	if err != nil {
@@ -123,16 +177,39 @@ func UpdateRequest(rawName string, cfg *config.Config) error {
 		return fmt.Errorf("request '%s' not found, use 'save' instead", name)
 	}
 
-	s.Requests[name] = RequestData{
-		Method:  cfg.Method,
-		URL:     cfg.URL,
-		Headers: cfg.Headers,
-		Body:    cfg.Body,
-	}
+	rd := configToRequestData(cfg)
+	rd.CreatedAt = s.Requests[name].CreatedAt // preserve original creation time
+	rd.Description = s.Requests[name].Description // preserve description
+	rd.UpdatedAt = time.Now().Format(time.RFC3339)
+	s.Requests[name] = rd
 	return saveStorage(s)
 }
 
-// DeleteRequest removes a request from the collection
+// DescribeRequest sets or updates the description for a saved request.
+func DescribeRequest(rawName, description string) error {
+	name, err := normalizeName(rawName)
+	if err != nil {
+		return err
+	}
+	if err := InitStorage(); err != nil {
+		return err
+	}
+	s, err := loadStorage()
+	if err != nil {
+		return err
+	}
+
+	req, ok := s.Requests[name]
+	if !ok {
+		return fmt.Errorf("request '%s' not found", name)
+	}
+	req.Description = description
+	req.UpdatedAt = time.Now().Format(time.RFC3339)
+	s.Requests[name] = req
+	return saveStorage(s)
+}
+
+// DeleteRequest removes a request from the collection.
 func DeleteRequest(rawName string) error {
 	name, err := normalizeName(rawName)
 	if err != nil {
@@ -154,7 +231,8 @@ func DeleteRequest(rawName string) error {
 	return saveStorage(s)
 }
 
-// GetRequest retrieves a saved request without interpolating fields
+// GetRequest retrieves a saved request and builds a Config from it.
+// Does NOT call InterpolateAll — callers must do that explicitly.
 func GetRequest(rawName string) (*config.Config, error) {
 	name, err := normalizeName(rawName)
 	if err != nil {
@@ -164,27 +242,16 @@ func GetRequest(rawName string) (*config.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	req, ok := s.Requests[name]
 	if !ok {
 		return nil, fmt.Errorf("request '%s' not found in collections", name)
 	}
 
-	cfg := &config.Config{
-		Method:  req.Method,
-		URL:     req.URL,
-		Headers: make(map[string]string),
-		Body:    req.Body,
-		Timeout: 30, // Default timeout
-	}
-	for k, v := range req.Headers {
-		cfg.Headers[k] = v
-	}
-
-	return cfg, nil
+	return requestDataToConfig(req), nil
 }
 
-// ListCollections lists available saved requests, grouped by namespace
+// ListCollections lists available saved requests, grouped by namespace.
 func ListCollections() {
 	s, err := loadStorage()
 	if err != nil || len(s.Requests) == 0 {
@@ -192,15 +259,13 @@ func ListCollections() {
 		return
 	}
 
-	// Collect and sort names
 	var names []string
 	for name := range s.Requests {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
-	// Group by namespace prefix
-	groups := make(map[string][]string) // prefix → list of full names
+	groups := make(map[string][]string)
 	var ungrouped []string
 
 	for _, name := range names {
@@ -214,13 +279,15 @@ func ListCollections() {
 
 	fmt.Println("Saved Requests:")
 
-	// Print ungrouped first
 	for _, name := range ungrouped {
 		req := s.Requests[name]
-		fmt.Printf("  - %s [%s %s]\n", name, req.Method, req.URL)
+		desc := ""
+		if req.Description != "" {
+			desc = "  # " + req.Description
+		}
+		fmt.Printf("  - %s [%s %s]%s\n", name, req.Method, req.URL, desc)
 	}
 
-	// Print grouped by namespace
 	var prefixes []string
 	for p := range groups {
 		prefixes = append(prefixes, p)
@@ -231,8 +298,12 @@ func ListCollections() {
 		fmt.Printf("\n  %s/\n", prefix)
 		for _, name := range groups[prefix] {
 			req := s.Requests[name]
-			shortName := name[len(prefix)+1:] // strip prefix/
-			fmt.Printf("    - %s [%s %s]\n", shortName, req.Method, req.URL)
+			shortName := name[len(prefix)+1:]
+			desc := ""
+			if req.Description != "" {
+				desc = "  # " + req.Description
+			}
+			fmt.Printf("    - %s [%s %s]%s\n", shortName, req.Method, req.URL, desc)
 		}
 	}
 
@@ -241,7 +312,7 @@ func ListCollections() {
 	}
 }
 
-// ListAllNames returns all collection names (for run-all pattern matching)
+// ListAllNames returns all collection names (for run-all pattern matching).
 func ListAllNames() ([]string, error) {
 	s, err := loadStorage()
 	if err != nil {
@@ -255,7 +326,7 @@ func ListAllNames() ([]string, error) {
 	return names, nil
 }
 
-// ExportCollections writes all collections to a file
+// ExportCollections writes all collections to a file.
 func ExportCollections(path string) error {
 	if err := InitStorage(); err != nil {
 		return err
@@ -272,7 +343,10 @@ func ExportCollections(path string) error {
 }
 
 // ImportCollections reads a JSON file and merges into current storage.
-// mode: "merge" (default, skip existing), "overwrite" (replace existing), "skip" (skip all existing)
+// mode:
+//   "merge"     — add new entries, skip existing (default)
+//   "overwrite" — replace existing entries
+//   "skip"      — skip all entries that conflict
 func ImportCollections(path string, mode string) error {
 	if err := InitStorage(); err != nil {
 		return err
@@ -300,7 +374,10 @@ func ImportCollections(path string, mode string) error {
 			case "overwrite":
 				s.Requests[name] = req
 				overwritten++
-			default: // "merge" and "skip" both skip existing
+			case "skip":
+				// Explicitly skip — do nothing
+				skipped++
+			default: // "merge" — add new, skip conflicts
 				skipped++
 			}
 		} else {

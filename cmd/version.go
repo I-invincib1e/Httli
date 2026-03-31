@@ -5,7 +5,10 @@ import (
 	"os"
 )
 
-var Version = "1.0.0"
+// Version is the current version string.
+// Injected at build time via:
+//   go build -ldflags "-X github.com/I-invincib1e/httli/cmd.Version=1.1.0" ./cmd/httli
+var Version = "dev"
 
 var VersionCmd = &Command{
 	Use:   "version",
