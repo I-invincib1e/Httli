@@ -13,6 +13,7 @@ type Styles struct {
 	Method  lipgloss.Style
 	Status  lipgloss.Style
 	Success lipgloss.Style
+	Warning lipgloss.Style
 	Error   lipgloss.Style
 	URL     lipgloss.Style
 	Key     lipgloss.Style
@@ -47,6 +48,7 @@ func New() *Styles {
 			Method:  lipgloss.NewStyle(),
 			Status:  lipgloss.NewStyle(),
 			Success: lipgloss.NewStyle(),
+			Warning: lipgloss.NewStyle(),
 			Error:   lipgloss.NewStyle(),
 			URL:     lipgloss.NewStyle(),
 			Key:     lipgloss.NewStyle(),
@@ -60,6 +62,7 @@ func New() *Styles {
 		Method:  colorStyle("86", true),
 		Status:  colorStyle("39", true),
 		Success: colorStyle("46", false),
+		Warning: colorStyle("226", false),
 		Error:   colorStyle("196", false),
 		URL:     colorStyle("33", false),
 		Key:     colorStyle("214", false),

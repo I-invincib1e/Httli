@@ -14,6 +14,7 @@ import (
 	"github.com/I-invincib1e/httli/internal/styles"
 )
 
+
 var CollectionRunAllCmd = &Command{
 	Use:   "run-all",
 	Short: "Run multiple saved requests sequentially",
@@ -32,20 +33,11 @@ Examples:
 			args = args[1:]
 		}
 
-		// Parse the rest of flags
+		// Parse the rest of flags (--fail-fast is now a proper registered flag)
 		runCfg, err := config.ParseFlags(args)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
-		}
-
-		// Simple fail-fast check (not standard flag, just check in args)
-		failFast := false
-		for _, a := range args {
-			if a == "--fail-fast" {
-				failFast = true
-				break
-			}
 		}
 
 		allNames, err := collections.ListAllNames()
@@ -101,23 +93,18 @@ Examples:
 			if err != nil {
 				res := runResult{Name: name, Error: err.Error()}
 				results = append(results, res)
-				if failFast { break }
+				if runCfg.FailFast { break }
 				continue
 			}
 
 			// Merge overriding configs
-			cfg.IgnoreMissingEnv = runCfg.IgnoreMissingEnv
-			cfg.Retry = runCfg.Retry
-			cfg.RetryDelay = runCfg.RetryDelay
-			if runCfg.Timeout != 30*time.Second && runCfg.Timeout != 0 {
-				cfg.Timeout = runCfg.Timeout
-			}
+			cfg.ApplyOverrides(runCfg)
 
 			// Interpolate AFTER env has been updated by previous runs!
 			if err := cfg.InterpolateAll(); err != nil {
 				res := runResult{Name: name, Error: err.Error()}
 				results = append(results, res)
-				if failFast { break }
+				if runCfg.FailFast { break }
 				continue
 			}
 
@@ -128,7 +115,7 @@ Examples:
 			if err != nil {
 				res := runResult{Name: name, Method: cfg.Method, URL: cfg.URL, Error: err.Error()}
 				results = append(results, res)
-				if failFast { break }
+				if runCfg.FailFast { break }
 				continue
 			}
 
@@ -160,7 +147,7 @@ Examples:
 				os.Unsetenv("HTTLI_LAST_JSON")
 			}
 
-			if failFast && resp.StatusCode >= 400 {
+			if runCfg.FailFast && resp.StatusCode >= 400 {
 				if runCfg.Format != "json" {
 					fmt.Printf("  -> Stopped due to --fail-fast (HTTP %d)\n", resp.StatusCode)
 				}

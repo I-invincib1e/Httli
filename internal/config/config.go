@@ -29,13 +29,15 @@ type Config struct {
 	IgnoreMissingEnv bool
 	Retry            int
 	RetryDelay       int
+	RetryBackoff     bool // opt-in exponential backoff
 	DryRun           bool
 
-	// New gap-coverage flags
-	Format  string // "json" for structured output, "" for pretty
-	Fail    bool   // exit 22 on HTTP 4xx/5xx
-	Raw     bool   // output raw body only, no chrome
-	Extract string // dot-notation path to extract from JSON response
+	// Output control flags
+	Format   string // "json" for structured output, "" for pretty
+	Fail     bool   // exit 22 on HTTP 4xx/5xx
+	FailFast bool   // stop batch execution on first error
+	Raw      bool   // output raw body only, no chrome
+	Extract  string // dot-notation path to extract from JSON response
 }
 
 // InterpolateAll substitutes all {{VAR}} templating in the Config using Env vars.
@@ -60,16 +62,43 @@ func (c *Config) InterpolateAll() error {
 	return nil
 }
 
-// ParseFlags parses command-line flags and returns a Config struct
+// ApplyOverrides copies runtime override flags from a parsed runCfg onto a loaded config.
+// This replaces the copy-paste override block used in collection run, run-all, and rerun.
+func (c *Config) ApplyOverrides(runCfg *Config) {
+	c.IgnoreMissingEnv = runCfg.IgnoreMissingEnv
+	c.Retry = runCfg.Retry
+	c.RetryDelay = runCfg.RetryDelay
+	c.RetryBackoff = runCfg.RetryBackoff
+	c.DryRun = runCfg.DryRun
+	c.Format = runCfg.Format
+	c.Fail = runCfg.Fail
+	c.FailFast = runCfg.FailFast
+	c.Raw = runCfg.Raw
+	c.Extract = runCfg.Extract
+	c.Quiet = runCfg.Quiet
+	c.StatusOnly = runCfg.StatusOnly
+	c.Verbose = runCfg.Verbose
+	c.Silent = runCfg.Silent
+
+	// Only override timeout if the user explicitly set a non-default value
+	if runCfg.Timeout != 30*time.Second && runCfg.Timeout != 0 {
+		c.Timeout = runCfg.Timeout
+	}
+}
+
+// ParseFlags parses command-line flags and returns a Config struct.
+// Note: This does NOT call InterpolateAll(). Callers that need interpolation
+// (e.g. collection run, rerun) must call cfg.InterpolateAll() explicitly.
+// Direct requests (request send) call InterpolateAll() in the command layer.
 func ParseFlags(args []string) (*Config, error) {
 	var method, url, body, headers, bodyFile, bearerToken, basicAuth, outputFile, env string
 	var format, extract string
 	var timeout time.Duration
 	var retry, retryDelay int
 	var followRedirects, silent, quiet, verbose, statusOnly, ignoreMissingEnv, dryRun bool
-	var fail, raw bool
+	var fail, failFast, raw, retryBackoff bool
 
-	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	fs := flag.NewFlagSet("httli", flag.ContinueOnError)
 	fs.Usage = PrintUsage
 
 	registerStr := func(short, long string, target *string, defVal, usage string) {
@@ -105,19 +134,25 @@ func ParseFlags(args []string) (*Config, error) {
 	registerBool("v", "verbose", &verbose, "Verbose mode")
 	registerBool("s", "status-only", &statusOnly, "Show only status code")
 	
-	// Existing extended flags
+	// Extended flags
 	fs.BoolVar(&ignoreMissingEnv, "ignore-missing-env", false, "Do not fail when {{VAR}} is missing")
 	registerInt("r", "retry", &retry, 0, "Number of retries for failed network or 5xx requests")
 	fs.IntVar(&retryDelay, "retry-delay", 2, "Delay in seconds between retries")
+	fs.BoolVar(&retryBackoff, "retry-backoff", false, "Use exponential backoff for retries (delay doubles each attempt, capped at 30s)")
 	fs.BoolVar(&dryRun, "dry-run", false, "Print request without execution")
 
-	// New gap-coverage flags
+	// Output control flags
 	fs.StringVar(&format, "format", "", "Output format: 'json' for structured output")
 	registerBool("F", "fail", &fail, "Exit with code 22 on HTTP 4xx/5xx responses")
+	fs.BoolVar(&failFast, "fail-fast", false, "Stop batch execution on first error (for run-all)")
 	fs.BoolVar(&raw, "raw", false, "Output raw response body only (no headers, colors, or formatting)")
 	registerStr("x", "extract", &extract, "", "Extract a value from JSON response (dot notation: .data.token)")
 
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			// --help or -h was passed; usage already printed by fs.Usage
+			os.Exit(0)
+		}
 		return nil, err
 	}
 
@@ -168,15 +203,13 @@ func ParseFlags(args []string) (*Config, error) {
 		IgnoreMissingEnv: ignoreMissingEnv,
 		Retry:            retry,
 		RetryDelay:       retryDelay,
+		RetryBackoff:     retryBackoff,
 		DryRun:           dryRun,
 		Format:           format,
 		Fail:             fail,
+		FailFast:         failFast,
 		Raw:              raw,
 		Extract:          extract,
-	}
-
-	if err := cfg.InterpolateAll(); err != nil {
-		return nil, err
 	}
 
 	return cfg, nil
@@ -207,14 +240,15 @@ func ParseHeaders(headersStr string) map[string]string {
 }
 
 func PrintUsage() {
-	fmt.Fprintf(os.Stderr, "HTTP CLI - Developer workflow tool\n\n")
-	fmt.Fprintf(os.Stderr, "Usage: %s [options] | %s [subcommand]\n\n", os.Args[0], os.Args[0])
-	fmt.Fprintf(os.Stderr, "Subcommands:\n")
-	fmt.Fprintf(os.Stderr, "  save <name> [options]    Save a request (fails if exists)\n")
-	fmt.Fprintf(os.Stderr, "  update <name> [options]  Update an existing request\n")
-	fmt.Fprintf(os.Stderr, "  delete <name>            Delete a saved request\n")
-	fmt.Fprintf(os.Stderr, "  show <name>              Display a saved request\n")
-	fmt.Fprintf(os.Stderr, "  run <name>               Run a saved request\n")
-	fmt.Fprintf(os.Stderr, "  collection list          List all saved requests\n\n")
-	fmt.Fprintf(os.Stderr, "Run with -h for flag details.\n")
+	fmt.Fprintf(os.Stderr, "Httli - A fast and colorful HTTP CLI tool\n\n")
+	fmt.Fprintf(os.Stderr, "Usage:\n")
+	fmt.Fprintf(os.Stderr, "  httli [flags]                         Quick request mode\n")
+	fmt.Fprintf(os.Stderr, "  httli request send [flags]            Send a request\n")
+	fmt.Fprintf(os.Stderr, "  httli collection [command] [flags]    Manage saved requests\n")
+	fmt.Fprintf(os.Stderr, "  httli history                         View request history\n")
+	fmt.Fprintf(os.Stderr, "  httli rerun <index> [flags]           Re-execute from history\n")
+	fmt.Fprintf(os.Stderr, "  httli env list                        Show loaded environment\n")
+	fmt.Fprintf(os.Stderr, "  httli completion <shell>              Generate shell completions\n")
+	fmt.Fprintf(os.Stderr, "  httli version                         Print version\n\n")
+	fmt.Fprintf(os.Stderr, "Run 'httli --help' or 'httli <command> --help' for details.\n")
 }

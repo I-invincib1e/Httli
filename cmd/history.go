@@ -99,20 +99,7 @@ var RerunCmd = &Command{
 		}
 
 		// Apply overrides from runCfg
-		cfg.IgnoreMissingEnv = runCfg.IgnoreMissingEnv
-		cfg.Retry = runCfg.Retry
-		cfg.RetryDelay = runCfg.RetryDelay
-		cfg.DryRun = runCfg.DryRun
-		cfg.Format = runCfg.Format
-		cfg.Fail = runCfg.Fail
-		cfg.Raw = runCfg.Raw
-		cfg.Extract = runCfg.Extract
-		cfg.Quiet = runCfg.Quiet
-		cfg.StatusOnly = runCfg.StatusOnly
-		cfg.Verbose = runCfg.Verbose
-		if runCfg.Timeout != 30*time.Second && runCfg.Timeout != 0 {
-			cfg.Timeout = runCfg.Timeout
-		}
+		cfg.ApplyOverrides(runCfg)
 
 		if err := cfg.InterpolateAll(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error interpolating: %v\n", err)

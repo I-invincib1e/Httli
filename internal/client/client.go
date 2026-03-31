@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -40,7 +41,12 @@ func addAuth(cfg *config.Config) error {
 	return nil
 }
 
-// ExecuteRequest executes an HTTP request based on the provided config
+// maxBackoffDelay caps exponential backoff at 30 seconds
+const maxBackoffDelay = 30 * time.Second
+
+// ExecuteRequest executes an HTTP request based on the provided config.
+// On 5xx responses, the body is always read. After exhausting retries on 5xx,
+// the last response is returned (not an error), so callers can inspect the body.
 func ExecuteRequest(cfg *config.Config) (*Response, error) {
 	if err := addAuth(cfg); err != nil {
 		return nil, err
@@ -69,13 +75,14 @@ func ExecuteRequest(cfg *config.Config) (*Response, error) {
 		}
 	}
 
-	var lastErr error
-
 	retries := cfg.Retry
 	if retries < 0 {
 		retries = 0
 	}
-	delay := time.Duration(cfg.RetryDelay) * time.Second
+	baseDelay := time.Duration(cfg.RetryDelay) * time.Second
+
+	var lastResp *Response
+	var lastErr error
 
 	for i := 0; i <= retries; i++ {
 		var bodyReader io.Reader
@@ -100,32 +107,76 @@ func ExecuteRequest(cfg *config.Config) (*Response, error) {
 		resp, err := httpClient.Do(req)
 		duration := time.Since(start)
 
-		if err == nil && resp.StatusCode < 500 {
-			defer resp.Body.Close()
-			bodyBytes, errRead := io.ReadAll(resp.Body)
-			if errRead != nil {
-				return nil, fmt.Errorf("error reading response body: %w", errRead)
+		if err != nil {
+			// Network error — retry if we have attempts left
+			lastErr = err
+			if i < retries {
+				delay := calcDelay(baseDelay, i, cfg.RetryBackoff)
+				if cfg.Verbose {
+					fmt.Fprintf(os.Stderr, "  ↻ Retry %d/%d in %s (network error: %v)\n", i+1, retries, delay, err)
+				}
+				time.Sleep(delay)
 			}
-			return &Response{
-				StatusCode: resp.StatusCode,
-				Status:     resp.Status,
-				Headers:    resp.Header,
-				Body:       bodyBytes,
-				Duration:   duration,
-			}, nil
+			continue
 		}
 
-		if err != nil {
-			lastErr = err
-		} else {
-			lastErr = fmt.Errorf("server error: %d %s", resp.StatusCode, resp.Status)
-			resp.Body.Close()
+		// Always read the body (even on 5xx) — this was the critical fix
+		bodyBytes, errRead := io.ReadAll(resp.Body)
+		resp.Body.Close() // immediate close, not deferred in loop
+
+		if errRead != nil {
+			return nil, fmt.Errorf("error reading response body: %w", errRead)
 		}
+
+		thisResp := &Response{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Headers:    resp.Header,
+			Body:       bodyBytes,
+			Duration:   duration,
+		}
+
+		// Non-5xx: return immediately (success or 4xx)
+		if resp.StatusCode < 500 {
+			return thisResp, nil
+		}
+
+		// 5xx: save as lastResp and retry if attempts remain
+		lastResp = thisResp
+		lastErr = nil // we have a real response, not a network error
 
 		if i < retries {
+			delay := calcDelay(baseDelay, i, cfg.RetryBackoff)
+			if cfg.Verbose {
+				fmt.Fprintf(os.Stderr, "  ↻ Retry %d/%d in %s (HTTP %d)\n", i+1, retries, delay, resp.StatusCode)
+			}
 			time.Sleep(delay)
 		}
 	}
 
-	return nil, fmt.Errorf("request failed: %v", lastErr)
+	// Exhausted retries
+	if lastResp != nil {
+		// Return the actual 5xx response so callers can inspect body/status
+		return lastResp, nil
+	}
+
+	// Pure network failure (no response ever received)
+	return nil, fmt.Errorf("request failed after %d retries: %v", retries, lastErr)
+}
+
+// calcDelay calculates the delay for a given retry attempt.
+// With backoff enabled: delay * 2^attempt, capped at maxBackoffDelay.
+// Without backoff: fixed delay.
+func calcDelay(baseDelay time.Duration, attempt int, backoff bool) time.Duration {
+	if !backoff {
+		return baseDelay
+	}
+	delay := baseDelay
+	for i := 0; i < attempt; i++ {
+		delay *= 2
+		if delay > maxBackoffDelay {
+			return maxBackoffDelay
+		}
+	}
+	return delay
 }

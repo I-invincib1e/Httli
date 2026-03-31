@@ -31,6 +31,11 @@ var RequestSendCmd = &Command{
 			os.Exit(1)
 		}
 
+		if err := cfg.InterpolateAll(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error interpolating: %v\n", err)
+			os.Exit(1)
+		}
+
 		st := styles.New()
 
 		if cfg.Verbose {
